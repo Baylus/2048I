@@ -1,5 +1,27 @@
 from enum import IntEnum, Enum
 
+############ NEAT STUFF
+CACHE_CHECKPOINTS = True
+NEAT_CONFIG_PATH = "config/neat_config.txt"
+
+CHECKPOINTS_PATH = "checkpoints/"
+GAMESTATES_PATH = "game_states/"
+
+
+GENERATIONS = 100
+# Number of iterations that one model will train before training the other one.
+TRAINING_INTERVAL = 5
+CACHE_CHECKPOINTS = True
+CHECKPOINT_INTERVAL = 10
+
+IS_HUMAN = False
+
+##############
+
+TPS = 30 # Ticks per second
+# Might have to change this to max number of consecutive no-ops
+MAX_UPDATES_PER_GAME = 100
+
 WINDOW_WIDTH = 700
 WINDOW_HEIGHT = 700
 
@@ -9,8 +31,6 @@ BOARD_HEIGHT = 600
 # Pixel spacings between the tiles
 TILE_GAP = 10
 
-TPS = 30 # Ticks per second
-GENERATIONS = 50
 
 BACKGROUND_COLOR = (187, 173, 160)
 BOARD_COLOR = (187, 173, 160)

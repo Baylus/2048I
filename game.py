@@ -26,9 +26,9 @@ class Board:
 
         # Def top corner
         self.x = (WINDOW_WIDTH - BOARD_WIDTH) / 2
-        print(f"{self.x}")
+        # print(f"{self.x}")
         self.y = (WINDOW_HEIGHT - BOARD_HEIGHT) / 2
-        print(f"{self.y}")
+        # print(f"{self.y}")
 
         # Tile size (I am forcing 1:1 ratio for board, so they are equally wide as tall)
         self.tile_size = (BOARD_HEIGHT - (TILE_GAP * (self.rows + 1))) / self.rows
@@ -47,6 +47,8 @@ class Board:
         self.grid = np.zeros((self.rows, self.cols), dtype=int)
         # Reset other game parameters
         self.score = 0
+        self.add_tile()
+        self.add_tile()
 
     def add_tile(self):
         """Adds a random 2 or 4 tile to an empty spot on the board
@@ -70,8 +72,8 @@ class Board:
 
 
     def act(self, action):
-        print(self.grid)
-        print("########################################################################")
+        # print(self.grid)
+        # print("########################################################################")
         new_grid = None
         if action == Action.UP:
             new_grid = self.move_up(self.grid)
@@ -82,10 +84,10 @@ class Board:
         elif action == Action.LEFT:
             new_grid = self.move_left(self.grid)
         
-        print(new_grid)
+        # print(new_grid)
         if np.all(self.grid == new_grid):
             # We didnt move anything at all, so this wasn't a valid action
-            print("This grid didnt change at all, so it doesnt count")
+            # print("This grid didnt change at all, so it doesnt count")
             return
 
         self.grid = new_grid
@@ -154,7 +156,7 @@ class Board:
                     # Found match below, so we can combine them
                     return False
         
-        print(f"It is done. Heres the grid\n{self.grid}")
+        # print(f"It is done. Heres the grid\n{self.grid}")
         return True
 
     def draw(self, surface):
