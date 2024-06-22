@@ -1,5 +1,5 @@
 [NEAT]
-pop_size               = 10
+pop_size               = 150
 fitness_criterion      = max
 fitness_threshold      = 4096
 no_fitness_termination = True

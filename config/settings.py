@@ -7,18 +7,23 @@ NEAT_CONFIG_PATH = "config/neat_config.txt"
 CHECKPOINTS_PATH = "checkpoints/"
 GAMESTATES_PATH = "game_states/"
 
-
 GENERATIONS = 100
 # Number of iterations that one model will train before training the other one.
 TRAINING_INTERVAL = 5
 CACHE_CHECKPOINTS = True
 CHECKPOINT_INTERVAL = 10
 
+# Epsilon settings
+EPSILON_START = 1.0  # Initial exploration rate
+EPSILON_END = 0.1    # Final exploration rate
+# Started at 0.995
+EPSILON_DECAY = 0.97  # Decay rate per generation
+
 IS_HUMAN = False
 
 ##############
 
-TPS = 30 # Ticks per second
+TPS = 1000 # Ticks per second
 # Might have to change this to max number of consecutive no-ops
 MAX_UPDATES_PER_GAME = 100
 
