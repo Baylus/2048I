@@ -164,3 +164,4 @@ cython_debug/
 
 game_states
 game_states/*
+debug.txt
