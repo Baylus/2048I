@@ -5,7 +5,35 @@ import numpy as np
 import os
 import pathlib
 import pygame
+import random
+import shutil
 import sys
+
+from action import Action
+from game import Board, GameDone
+
+from config.settings import *
+
+########## STARTUP CLEANUP
+
+# DELETE GAME STATES #
+
+folder = GAMESTATES_PATH
+for filename in os.listdir(folder):
+    file_path = os.path.join(folder, filename)
+    try:
+        if os.path.isfile(file_path) or os.path.islink(file_path):
+            os.unlink(file_path)
+        elif os.path.isdir(file_path):
+            shutil.rmtree(file_path)
+    except Exception as e:
+        print('Failed to delete %s. Reason: %s' % (file_path, e))
+
+# Delete debug file to ensure we arent looking at old exceptions
+pathlib.Path.unlink("debug.txt", missing_ok=True)
+
+
+##################
 
 
 class NpEncoder(json.JSONEncoder):
@@ -18,10 +46,6 @@ class NpEncoder(json.JSONEncoder):
             return obj.tolist()
         return super(NpEncoder, self).default(obj)
 
-from action import Action
-from game import Board, GameDone
-
-from config.settings import *
 
 if WINDOW_HEIGHT < BOARD_HEIGHT or WINDOW_WIDTH < BOARD_WIDTH:
     raise ValueError("Board can't be bigger than the window")
@@ -40,8 +64,10 @@ pygame.display.set_caption("2048I")
 
 board = Board()
 
+# Globals modified and used all over
 curr_pop = 0
 curr_gen = 0
+epsilon = 0
 
 neat_config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
                             neat.DefaultSpeciesSet, neat.DefaultStagnation,
@@ -68,20 +94,16 @@ def draw():
 def main(net=None) -> int:
     # Initial housekeeping
     global curr_pop
-    global curr_gen
+
     curr_pop += 1
     board.reset()
 
     clock = pygame.time.Clock()
     game_result = {
+        "fitness": 0,
         "game_states": [],
-        "fitness": 0
     }
     
-    epsilon_start = 1.0  # Initial exploration rate
-    epsilon_end = 0.1    # Final exploration rate
-    epsilon_decay = 0.995  # Decay rate per generation
-    epsilon = max(epsilon_end, epsilon_start * (epsilon_decay ** curr_gen))
     # Main game loop
     running = True
     updates = 0
@@ -96,7 +118,14 @@ def main(net=None) -> int:
                 keys = pygame.key.get_pressed()
                 action = get_action(keys)
             else:
-                action = get_net_action(net, board.get_state())
+                if ENABLE_EPSILON and random.random() < epsilon:
+                    # Choose a random action
+                    # print("Picking random choice")
+                    action = random.choice(list(Action))
+                else:
+                    # Choose the action suggested by the neural network
+                    print("We are actually choosing this time")
+                    action = get_net_action(net, board.get_state())
             
             if action:
                 board.act(action)
@@ -111,6 +140,10 @@ def main(net=None) -> int:
                 # game_result["notes"] = "Game stalemated"
                 print("Something went really wrong here, the network wasnt outputting somehow.")
                 running = False
+    except GameDone:
+        # Expected state
+        print("Finished game naturally")
+        pass
     finally:
         file_name = f"{str(board.score)}_{str(curr_pop)}"
         file_name += ".json"
@@ -186,9 +219,12 @@ class OneIndexedCheckpointer(neat.Checkpointer):
 def eval_genomes(genomes, config_tarnished):
     global curr_gen
     global curr_pop
+    global epsilon
     curr_pop = 0
     curr_gen += 1
     pathlib.Path(f"{GAMESTATES_PATH}/gen_{curr_gen}").mkdir(parents=True, exist_ok=True)
+
+    epsilon = max(EPSILON_END, EPSILON_START * (EPSILON_DECAY ** curr_gen))
 
     print(type(genomes))
     if type(genomes) == dict:
