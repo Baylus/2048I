@@ -94,16 +94,14 @@ def draw():
 def main(net=None) -> int:
     # Initial housekeeping
     global curr_pop
-    global curr_gen
-    global epsilon
 
     curr_pop += 1
     board.reset()
 
     clock = pygame.time.Clock()
     game_result = {
+        "fitness": 0,
         "game_states": [],
-        "fitness": 0
     }
     
     # Main game loop
@@ -120,7 +118,7 @@ def main(net=None) -> int:
                 keys = pygame.key.get_pressed()
                 action = get_action(keys)
             else:
-                if random.random() < epsilon:
+                if ENABLE_EPSILON and random.random() < epsilon:
                     # Choose a random action
                     # print("Picking random choice")
                     action = random.choice(list(Action))
@@ -226,9 +224,6 @@ def eval_genomes(genomes, config_tarnished):
     curr_gen += 1
     pathlib.Path(f"{GAMESTATES_PATH}/gen_{curr_gen}").mkdir(parents=True, exist_ok=True)
 
-    epsilon_start = 1.0  # Initial exploration rate
-    epsilon_end = 0.1    # Final exploration rate
-    epsilon_decay = 0.995  # Decay rate per generation
     epsilon = max(EPSILON_END, EPSILON_START * (EPSILON_DECAY ** curr_gen))
 
     print(type(genomes))

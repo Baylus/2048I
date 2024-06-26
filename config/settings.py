@@ -7,13 +7,14 @@ NEAT_CONFIG_PATH = "config/neat_config.txt"
 CHECKPOINTS_PATH = "checkpoints/"
 GAMESTATES_PATH = "game_states/"
 
-GENERATIONS = 100
+GENERATIONS = 500
 # Number of iterations that one model will train before training the other one.
 TRAINING_INTERVAL = 5
 CACHE_CHECKPOINTS = True
 CHECKPOINT_INTERVAL = 10
 
-# Epsilon settings
+# Epsilon-greedy strategy settings
+ENABLE_EPSILON = True
 EPSILON_START = 1.0  # Initial exploration rate
 EPSILON_END = 0.1    # Final exploration rate
 # Started at 0.995
