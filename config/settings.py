@@ -13,6 +13,9 @@ TRAINING_INTERVAL = 5
 CACHE_CHECKPOINTS = True
 CHECKPOINT_INTERVAL = 10
 
+SAVE_GAMESTATES = False
+NUM_BEST_GENS_FOR_STATS = 5 # Number of best generations to show for stats
+
 # Epsilon-greedy strategy settings
 ENABLE_EPSILON = True
 EPSILON_START = 1.0  # Initial exploration rate
