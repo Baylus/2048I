@@ -137,6 +137,9 @@ class Board:
     def get_state(self):
         return self.grid.flatten()
 
+    def set_state(self, new_state):
+        self.grid = np.reshape(new_state, (self.rows, self.cols))
+
     def is_done(self):
         # Check if the game is over
 
