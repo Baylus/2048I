@@ -14,7 +14,11 @@ CACHE_CHECKPOINTS = True
 CHECKPOINT_INTERVAL = 10
 
 SAVE_GAMESTATES = False
+
+### Replays and Statistics
 NUM_BEST_GENS_FOR_STATS = 5 # Number of best generations to show for stats
+REPLAY_TPS = 10
+### End replays and statistics
 
 # Epsilon-greedy strategy settings
 ENABLE_EPSILON = True
