@@ -49,8 +49,8 @@ parser.add_argument("-s", "--stats", dest="stats", default=None, type=int, nargs
 parser.add_argument("-q", "--quiet",
                     action="store_true", dest="quiet", default=False,
                     help="don't print status messages to stdout. Unused")
-parser.add_argument("-c", "--clean", dest="clean", action="store_false", default=True,
-                    help="Should we clean up our previous gamestates?")
+parser.add_argument("-dc", "--dont_clean", dest="clean", action="store_false", default=True,
+                    help="Should we avoid cleaning up our previous gamestates?")
 
 args = parser.parse_args()
 
@@ -74,13 +74,15 @@ if args.stats:
         raise ValueError(f"You didn't give the proper number of values for statistics. What you gave {args.stats}")
 
 
-replays = True if any([args.replay, args.best, args.gens != None]) else False
+# replays = True if any([args.replay, args.best, args.gens != None]) else False
 
 
 ########## STARTUP CLEANUP
 
 # DELETE GAME STATES #
-if not replays and args.clean and not SAVE_GAMESTATES:
+# Only delete if we arent replaying, checking stats, and havent specified to not clean
+# if not replays and args.clean and not SAVE_GAMESTATES:
+if args.clean and not args.stats and not SAVE_GAMESTATES:
     folder = GAMESTATES_PATH
     for filename in os.listdir(folder):
         file_path = os.path.join(folder, filename)
@@ -187,7 +189,7 @@ def play_game(net=None) -> int:
                     action = random.choice(list(Action))
                 else:
                     # Choose the action suggested by the neural network
-                    print("We are actually choosing this time")
+                    # print("We are actually choosing this time")
                     action = get_net_action(net, board.get_state())
             
             if action:
@@ -205,12 +207,11 @@ def play_game(net=None) -> int:
                 running = False
     except GameDone:
         # Expected state
-        print("Finished game naturally")
+        # print("Finished game naturally")
         pass
     finally:
         file_name = f"{str(board.score)}_{str(curr_pop)}"
         file_name += ".json"
-        print(type(game_result["game_states"][0]))
         with open(f"{GAMESTATES_PATH}/gen_{curr_gen}/{file_name}", 'w') as f:
             json.dump(game_result, f, cls=NpEncoder, indent=4)
     
@@ -284,7 +285,6 @@ def eval_genomes(genomes, config_tarnished):
 
     epsilon = max(EPSILON_END, EPSILON_START * (EPSILON_DECAY ** curr_gen))
 
-    print(type(genomes))
     if type(genomes) == dict:
         genomes = list(genomes.items())
 
@@ -454,7 +454,8 @@ def process_statistics():
 ### Statistics ###
 def display_stats_from_gen(gen_num):
     # Get most fit populations from gen
-    pop_files = os.listdir(f"{GAMESTATES_PATH}/gen_{gen_num}")
+    gen_path = f"{GAMESTATES_PATH}/gen_{gen_num}/"
+    pop_files = os.listdir(gen_path)
     pop_files.sort(key=lambda x: int(x[: x.find("_")])) # Sort by fitness value, best is last
 
     def get_file_details(file_name: str) -> tuple[int, int]:
@@ -470,7 +471,7 @@ def display_stats_from_gen(gen_num):
         # Extension offset because all file names have ".json" on the end
         EXTENSION_OFFSET = -5
         fitness, pop_num = (file_name[ : index_split], file_name[index_split + 1 : EXTENSION_OFFSET])
-        return fitness, pop_num
+        return int(fitness), int(pop_num)
 
     # find average, best, worst fitness and best tile and longest games. Pair the gen numbers with each stat
     # (val, pop_num)
@@ -483,7 +484,7 @@ def display_stats_from_gen(gen_num):
     # Going in reverse will save a lot of overwriting, and could lead to skipping checks
     # altogether, but I am too lazy to implement that.
     for file in reversed(pop_files):
-        with open(file) as json_file:
+        with open(gen_path + file) as json_file:
             game_data = json.load(json_file)
         
         fitness, pop = get_file_details(file)
@@ -510,18 +511,20 @@ def display_stats_from_gen(gen_num):
     print(gen_stats)
 
     print("### Best Populations: ")
+    # print(best_pops)
     for pop_file in best_pops:
         # Print populations statistics
-        with open(pop_file) as json_file:
+        with open(gen_path + pop_file) as json_file:
             game_data = json.load(json_file)
-        fitness, pop = get_file_details(file)
+        fitness, pop = get_file_details(pop_file)
         stats = "\t"
         stats += f"{pop}: "
         stats += f"Fitness: {fitness}. "
         last_frame = game_data["game_states"][-1]
         largest_tile = max(last_frame)
         stats += f"Best tile: {largest_tile}. "
-        stats += f"Game Length: {len(game_data["game_states"])}"
+        length = len(game_data["game_states"])
+        stats += f"Game Length: {length}"
         print(stats)
     
     print("") # Just put a newline after this generation
