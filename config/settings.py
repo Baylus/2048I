@@ -7,7 +7,7 @@ NEAT_CONFIG_PATH = "config/neat_config.txt"
 CHECKPOINTS_PATH = "checkpoints/"
 GAMESTATES_PATH = "game_states/"
 
-GENERATIONS = 500
+GENERATIONS = 1000
 # Number of iterations that one model will train before training the other one.
 TRAINING_INTERVAL = 5
 CACHE_CHECKPOINTS = True
@@ -26,7 +26,7 @@ IS_HUMAN = False
 
 TPS = 1000 # Ticks per second
 # Might have to change this to max number of consecutive no-ops
-MAX_UPDATES_PER_GAME = 100
+MAX_UPDATES_PER_GAME = 10000
 
 WINDOW_WIDTH = 700
 WINDOW_HEIGHT = 700

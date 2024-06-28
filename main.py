@@ -124,7 +124,7 @@ def main(net=None) -> int:
                     action = random.choice(list(Action))
                 else:
                     # Choose the action suggested by the neural network
-                    print("We are actually choosing this time")
+                    # print("We are actually choosing this time")
                     action = get_net_action(net, board.get_state())
             
             if action:
