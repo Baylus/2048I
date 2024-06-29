@@ -24,10 +24,10 @@ REPLAY_TPS = 10
 
 # Epsilon-greedy strategy settings
 ENABLE_EPSILON = True
-EPSILON_START = 1.0  # Initial exploration rate
-EPSILON_END = 0.1    # Final exploration rate
+EPSILON_START = 0.8  # Initial exploration rate
+EPSILON_END = 0.0    # Final exploration rate
 # Started at 0.995
-EPSILON_DECAY = 0.97  # Decay rate per generation
+EPSILON_DECAY = 0.96  # Decay rate per generation
 
 IS_HUMAN = False
 
