@@ -82,7 +82,7 @@ if args.stats:
 # DELETE GAME STATES #
 # Only delete if we arent replaying, checking stats, and havent specified to not clean
 # if not replays and args.clean and not SAVE_GAMESTATES:
-if args.clean and not args.stats and not SAVE_GAMESTATES:
+if args.clean and not args.stats and args.reset and not SAVE_GAMESTATES:
     folder = GAMESTATES_PATH
     for filename in os.listdir(folder):
         file_path = os.path.join(folder, filename)
