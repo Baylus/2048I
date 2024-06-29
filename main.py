@@ -308,7 +308,7 @@ def main():
         # Find the run that we need to use
         runs = os.listdir(curr_fitness_checkpoints)
         run_val = 1
-        for i in range(1, 10):
+        for i in range(1, 25):
             if f"run_{i}" not in runs:
                 if not RESTORE_CHECKPOINTS or args.reset:
                     # We are not restoring from checkpoints, so we need to make a new directory, which would be the i'th run dir
@@ -317,8 +317,7 @@ def main():
             # Store this int in case we need to restore to a previous checkpoint
             run_val = i
         else:
-            # If this happens then I have been running too many runs and I need to think of changing the fitnesss function
-            raise Exception("Youve been trying this fitness function too many times. Fix the problem.")
+            raise Exception("Try clearing empty run directories or archiving some")
         
         this_runs_checkpoints = f"{curr_fitness_checkpoints}/run_{run_val}"
         print(f"We found our run folder is {run_val}")
