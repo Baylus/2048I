@@ -265,15 +265,6 @@ def get_action(inputs) -> Action:
     last_action = action
     return None
 
-# To fix it from doing n-1 checkpoint numbers
-class OneIndexedCheckpointer(neat.Checkpointer):
-    def __init__(self, generation_interval=1, time_interval_seconds=None, filename_prefix="neat-checkpoint-"):
-        super().__init__(generation_interval, time_interval_seconds, filename_prefix)
-
-    def save_checkpoint(self, config, population, species_set, generation):
-        # Increment the generation number by 1 to make it 1-indexed
-        super().save_checkpoint(config, population, species_set, generation + 1)
-
 
 def eval_genomes(genomes, config_tarnished):
     global curr_gen
@@ -306,6 +297,9 @@ def eval_genomes(genomes, config_tarnished):
 
 ### Core processing functions ###
 def main():
+    global pop
+    global curr_gen
+
     # Add reporters, including a Checkpointer
     if CACHE_CHECKPOINTS:
         # Setup checkpoints
@@ -313,25 +307,47 @@ def main():
         pathlib.Path(curr_fitness_checkpoints).mkdir(parents=True, exist_ok=True)
         # Find the run that we need to use
         runs = os.listdir(curr_fitness_checkpoints)
-        i = 1
+        run_val = 1
         for i in range(1, 10):
             if f"run_{i}" not in runs:
+                if not RESTORE_CHECKPOINTS or args.reset:
+                    # We are not restoring from checkpoints, so we need to make a new directory, which would be the i'th run dir
+                    run_val = i
                 break
+            # Store this int in case we need to restore to a previous checkpoint
+            run_val = i
         else:
             # If this happens then I have been running too many runs and I need to think of changing the fitnesss function
             raise Exception("Youve been trying this fitness function too many times. Fix the problem.")
         
-        this_runs_checkpoints = f"{curr_fitness_checkpoints}/run_{i}"
+        this_runs_checkpoints = f"{curr_fitness_checkpoints}/run_{run_val}"
+        print(f"We found our run folder is {run_val}")
         pathlib.Path(this_runs_checkpoints).mkdir(parents=True, exist_ok=True)
-
-        pop.add_reporter(neat.StdOutReporter(True))
-
-        checkpointer = OneIndexedCheckpointer(generation_interval=CHECKPOINT_INTERVAL, filename_prefix=f'{this_runs_checkpoints}/neat-checkpoint-')
+        start_gen_num = 0
+        checkpointer = None
+        if RESTORE_CHECKPOINTS and not args.reset:
+            # We gotta find the right run to restore
+            existing_checkpoint_files = os.listdir(this_runs_checkpoints)
+            print(f"This is our existing checkpoints from {this_runs_checkpoints}:\n{existing_checkpoint_files}")
+            if existing_checkpoint_files:
+                # Since we have checkpoints, we need to actually initialize the population with them.
+                checkpoint, start_gen_num = get_newest_checkpoint_file(existing_checkpoint_files, CHECKPOINT_PREFIX)
+                pop = neat.Checkpointer.restore_checkpoint(f"{this_runs_checkpoints}/{checkpoint}")
+                checkpointer = neat.Checkpointer(generation_interval=CHECKPOINT_INTERVAL, filename_prefix=f'{this_runs_checkpoints}/{CHECKPOINT_PREFIX}')
+                print(f"We are using {checkpoint}")
+                curr_gen = start_gen_num
+            pass
         
+        if not checkpointer:
+            # If we are not resuming previous checkpoint, create it one indexed so we don't get weird numbers
+            checkpointer = OneIndexedCheckpointer(generation_interval=CHECKPOINT_INTERVAL, filename_prefix=f'{this_runs_checkpoints}/neat-checkpoint-')
+        
+        pop.add_reporter(neat.StdOutReporter(True))
+        pop.add_reporter(neat.StatisticsReporter())
         pop.add_reporter(checkpointer)
     
     try:
-        winner = pop.run(lambda genomes, config: eval_genomes(genomes, config), n=GENERATIONS)
+        winner = pop.run(lambda genomes, config: eval_genomes(genomes, config), n=GENERATIONS - start_gen_num)
     except Exception as e:
         with open("debug.txt", "w") as f:
             f.write(str(e))
@@ -686,6 +702,54 @@ def display_stats_from_gen(gen_num):
 #         replay_game(game_data)
 
 ### End - Replays ###
+
+### Checkpoint ###
+
+
+# To fix it from doing n-1 checkpoint numbers
+class OneIndexedCheckpointer(neat.Checkpointer):
+    def __init__(self, generation_interval=1, time_interval_seconds=None, filename_prefix="neat-checkpoint-"):
+        super().__init__(generation_interval, time_interval_seconds, filename_prefix)
+
+    def save_checkpoint(self, config, population, species_set, generation):
+        # Increment the generation number by 1 to make it 1-indexed
+        super().save_checkpoint(config, population, species_set, generation + 1)
+
+
+def get_newest_checkpoint_file(files: list[str], prefix: str) -> tuple[str, int]:
+    """Gets the most recent checkpoint from the previous run the resume the training.
+
+    Args:
+        files (list[str]): _description_
+        prefix (str): _description_
+
+    Returns:
+        tuple[str, int]: <file name, generation number>
+    """
+    def get_gen_num_from_name(file_name: str) -> int:
+        if file_name[-1] == '-':
+            raise ValueError(f"There is something really wrong. This checkpoint file is missing a gen number: {file_name}")
+        max_gen_num_len = len(str(GENERATIONS))
+        postfix = file_name[ -max_gen_num_len :]
+        for i in range(len(postfix)):
+            if postfix[i] == '-':
+                # We found the dash, the rest is the gen number
+                return int(postfix[i+1:])
+        else:
+            # We had no '-', so this whole thing must be the gen number
+            return int(postfix)
+    
+    file_details = ["", 0]
+    prefixed = [fn for fn in files if prefix in fn] # Files containing the prefix
+    for name in prefixed:
+        gen = get_gen_num_from_name(name)
+        if gen > file_details[1]:
+            file_details = (name, gen)
+
+    return file_details
+
+
+### End - Checkpoint ###
 
 
 if __name__ == "__main__":
