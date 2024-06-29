@@ -200,11 +200,6 @@ def get_action(inputs) -> Action:
     last_action = action
     return None
 
-
-# if __name__ == "__main__":
-#     main()
-
-
 # To fix it from doing n-1 checkpoint numbers
 class OneIndexedCheckpointer(neat.Checkpointer):
     def __init__(self, generation_interval=1, time_interval_seconds=None, filename_prefix="neat-checkpoint-"):
