@@ -166,6 +166,7 @@ def play_game(net=None) -> int:
     clock = pygame.time.Clock()
     game_result = {
         "fitness": 0,
+        "result_notes": "",
         "game_states": [],
     }
     
@@ -205,6 +206,7 @@ def play_game(net=None) -> int:
             if updates > MAX_UPDATES_PER_GAME:
                 # game_result["notes"] = "Game stalemated"
                 print("Something went really wrong here, the network wasnt outputting somehow.")
+                game_result["result_notes"] = "We ran out of time"
                 running = False
     except GameDone:
         # Expected state
