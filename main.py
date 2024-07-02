@@ -12,7 +12,8 @@ import shutil
 import sys
 
 from action import Action
-from game import Board, GameDone
+from game import Board, GameDone, NoOpAction
+from fitness import get_fitness
 
 from config.settings import *
 
@@ -156,7 +157,7 @@ def draw():
     draw_text(screen, "Population: " + str(curr_pop), 400, 650, font_size=40, color=(255, 0, 0))
     pygame.display.update()
 
-def play_game(net=None) -> int:
+def play_game(net = None) -> int:
     # Initial housekeeping
     global curr_pop
 
@@ -180,26 +181,32 @@ def play_game(net=None) -> int:
                 if event.type == pygame.QUIT:
                     running = False
 
+            random_action: bool = False
             if IS_HUMAN:
                 keys = pygame.key.get_pressed()
                 action = get_action(keys)
             else:
                 if ENABLE_EPSILON and random.random() < epsilon:
                     # Choose a random action
-                    # print("Picking random choice")
                     action = random.choice(list(Action))
+                    random_action = True
                 else:
                     # Choose the action suggested by the neural network
-                    # print("We are actually choosing this time")
-                    # print("We are actually choosing this time")
                     action = get_net_action(net, board.get_state())
             
             if action:
-                board.act(action)
+                try:
+                    board.act(action)
+                except NoOpAction:
+                    # This means that the board didnt change as a result of the action taken.
+                    # If this is a random action, we shouldn't penalize the model for nothing happening.
+                    # So we will not record this as a frame as far as the game is concerned.
+                    if random_action:
+                        # Continue to next loop iteration, to avoid logging this frame and counting it against the model
+                        continue
 
             draw()
             game_result["game_states"].append(list(board.get_state()))
-            game_result["fitness"] = board.score
             if (board.is_done()):
                 raise GameDone
             updates += 1
@@ -213,7 +220,8 @@ def play_game(net=None) -> int:
         # print("Finished game naturally")
         pass
     finally:
-        file_name = f"{str(board.score)}_{str(curr_pop)}"
+        game_result["fitness"] = get_fitness(board, game_result)
+        file_name = f"{str(game_result["fitness"])}_{str(curr_pop)}"
         file_name += ".json"
         with open(f"{GAMESTATES_PATH}/gen_{curr_gen}/{file_name}", 'w') as f:
             json.dump(game_result, f, cls=NpEncoder, indent=4)
