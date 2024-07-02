@@ -14,3 +14,7 @@ Each tile is either 0, or a power of 2. Every time an action is taken, a new til
 So, its not optimal, but I am going to be choosing NEAT for this solution, as this is only my second project in AI, and a huge plus of doing this project is to also gain some more experience in NEAT so I can get a better idea on how to improve that one.
 
 The solution I will transition to after that is DQN (Deep Q-Learning), which I have heard is very good at this sort of thing, and has a good primer on most of the key aspects of manual AI training, with back propagation and replay training.
+
+# To improve
+- reduce fitness points for every turn that the board does not change
+- Utilize Q Deep learning
