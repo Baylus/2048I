@@ -220,8 +220,9 @@ def play_game(net = None) -> int:
         # print("Finished game naturally")
         pass
     finally:
-        game_result["fitness"] = get_fitness(board, game_result)
-        file_name = f"{str(game_result["fitness"])}_{str(curr_pop)}"
+        fit = get_fitness(board, game_result)
+        game_result["fitness"] = fit
+        file_name = f"{str(fit)}_{str(curr_pop)}"
         file_name += ".json"
         with open(f"{GAMESTATES_PATH}/gen_{curr_gen}/{file_name}", 'w') as f:
             json.dump(game_result, f, cls=NpEncoder, indent=4)
