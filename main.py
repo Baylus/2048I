@@ -167,6 +167,7 @@ def play_game(net = None) -> int:
     clock = pygame.time.Clock()
     game_result = {
         "fitness": 0,
+        "score": 0,
         "result_notes": "",
         "game_states": [],
     }
@@ -220,6 +221,7 @@ def play_game(net = None) -> int:
         # print("Finished game naturally")
         pass
     finally:
+        game_result["score"] = board.score
         fit = get_fitness(board, game_result)
         game_result["fitness"] = fit
         file_name = f"{str(fit)}_{str(curr_pop)}"
@@ -352,6 +354,8 @@ def main():
             # If we are not resuming previous checkpoint, create it one indexed so we don't get weird numbers
             checkpointer = OneIndexedCheckpointer(generation_interval=CHECKPOINT_INTERVAL, filename_prefix=f'{this_runs_checkpoints}/neat-checkpoint-')
         
+        # TODO: Add this to allow us to record to a output file too
+        # https://stackoverflow.com/a/14906787
         pop.add_reporter(neat.StdOutReporter(True))
         pop.add_reporter(neat.StatisticsReporter())
         pop.add_reporter(checkpointer)
