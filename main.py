@@ -555,6 +555,7 @@ def display_stats_from_gen(gen_num):
         stats += f"Best tile: {largest_tile}. "
         length = len(game_data["game_states"])
         stats += f"Game Length: {length}"
+        stats += f"Fitness lost to failed moves: {game_data["score"] - game_data["fitness"]}"
         print(stats)
     
     print("") # Just put a newline after this generation
