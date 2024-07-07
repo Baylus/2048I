@@ -38,6 +38,20 @@ def delete_folder(folder):
     pass
 
 def clean_gamestates():
+    """Cleans out gamestates.
+
+    Will delete the oldest $BATCH_REMOVE_GENS from gamestates, perserving every
+    $ARCHIVE_GEN_INTERVAL.
+
+    WARNING: However, if we are still unable to remove the desired amount of gamestates cleared,
+    then we will start deleting the "archived" generations from oldest to youngest.
+
+    Example:
+        batch remove = 10, archive = 5
+        for generations 1-20, the following will be what remains
+            5, 10, 13, 14, 15, ...
+        Because we removed 10 generations, but saved every 5th one.
+    """
     # We know for a fact that we have to remove some generations.
     # Get all generations
     existing_gens = os.listdir(GAMESTATES_PATH)
@@ -45,6 +59,7 @@ def clean_gamestates():
     gen_nums.sort()
 
     removed = 0
+    # Delete $BATCH_REMOVE_GENS, while perserving archived generations
     for num in gen_nums[:]:
         # Check if we should keep this one archived
         if ARCHIVE_GEN_INTERVAL and (num % ARCHIVE_GEN_INTERVAL) == 0:
@@ -66,7 +81,7 @@ def clean_gamestates():
         # We removed enough.
         return
     
-    # We did not remove enough. 
+    # We did not remove enough. Start removing the protected generations
     for i in range(BATCH_REMOVE_GENS - removed):
         # Remove the oldest generations first
         delete_folder(f"{GAMESTATES_PATH}/gen_{gen_nums[i]}")
