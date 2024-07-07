@@ -23,7 +23,7 @@ MAX_SIZE_OF_GAMESTATES = 25
 # The interval at which we should save gamestate generations, incase we want to save
 # some old ones, but not all the unnecessary. 
 # e.g. interval = 5, gens 5, 10, 15, 20, etc. will be saved
-ARCHIVE_GEN_INTERVAL = 5
+ARCHIVE_GEN_INTERVAL = 10
 ###
 
 ### Replays and Statistics

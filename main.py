@@ -16,7 +16,7 @@ from game import Board, GameDone, NoOpAction
 from fitness import get_fitness
 
 from config.settings import *
-from files.manage_files import get_newest_checkpoint_file
+from files.manage_files import get_newest_checkpoint_file, prune_gamestates
 
 parser = ArgumentParser()
 parser.add_argument("-r", "--reset", dest="reset", action="store_true", default=False,
@@ -308,6 +308,15 @@ def eval_genomes(genomes, config_tarnished):
         genome.fitness = player_fitness
 
         assert genome.fitness is not None
+
+    # See if we need to clean up our gamestates
+    # We should only need to prune the same interval that we batch delete, since they should
+    # All roughly be the same size.
+    # Actually, we are going to do it one less, because we want to be able to catch up in case the
+    # games are going longer due to fitter populations learning to survive.
+    if (curr_gen % (BATCH_REMOVE_GENS - 1)) == 0:
+        prune_gamestates()
+
 
 ### Core processing functions ###
 def main():

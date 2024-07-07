@@ -144,7 +144,6 @@ def prune_gamestates():
     size = GetFolderSize(GAMESTATES_PATH)
     if (size > MAX_SIZE_OF_GAMESTATES * (1024 * 1024 * 1024)):
         clean_gamestates()
-    pass
 
 #### END MANAGE GAME STATES ####
 
