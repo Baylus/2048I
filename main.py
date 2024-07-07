@@ -161,17 +161,17 @@ def draw(board, pop):
 
     board.draw(screen)
 
-    draw_text(screen, "Generation: " + str(get_gen.curret), 100, 650, font_size=40, color=(255, 0, 0))
+    draw_text(screen, "Generation: " + str(get_gen.current), 100, 650, font_size=40, color=(255, 0, 0))
     draw_text(screen, "Population: " + str(pop), 400, 650, font_size=40, color=(255, 0, 0))
     pygame.display.update()
 
-def play_game(net, pop) -> int:
+def play_game(net, pop, gen, ep) -> int:
     try:
         # Initial housekeeping
         print("Starting Board")
         board = Board()
         board.reset()
-        gen = get_gen.current
+        print(f"Generation: {gen}, Population: {pop}")
 
         print("before clock")
         clock = pygame.time.Clock()
@@ -199,8 +199,7 @@ def play_game(net, pop) -> int:
                 keys = pygame.key.get_pressed()
                 action = get_action(keys)
             else:
-                if ENABLE_EPSILON and random.random() < epsilon():
-                    # Choose a random action
+                if ENABLE_EPSILON and random.random() < ep:
                     action = random.choice(list(Action))
                     random_action = True
                 else:
