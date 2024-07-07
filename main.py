@@ -12,9 +12,11 @@ import shutil
 import sys
 
 from action import Action
-from game import Board, GameDone
+from game import Board, GameDone, NoOpAction
+from fitness import get_fitness
 
 from config.settings import *
+from files.manage_files import prune_gamestates, get_pop_and_gen
 
 parser = ArgumentParser()
 parser.add_argument("-r", "--reset", dest="reset", action="store_true", default=False,
@@ -82,7 +84,7 @@ if args.stats:
 # DELETE GAME STATES #
 # Only delete if we arent replaying, checking stats, and havent specified to not clean
 # if not replays and args.clean and not SAVE_GAMESTATES:
-if args.clean and not args.stats and not SAVE_GAMESTATES:
+if args.clean and not args.stats and args.reset and not SAVE_GAMESTATES:
     folder = GAMESTATES_PATH
     for filename in os.listdir(folder):
         file_path = os.path.join(folder, filename)
@@ -134,12 +136,7 @@ curr_pop = 0
 curr_gen = 0
 epsilon = 0
 
-neat_config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
-                            neat.DefaultSpeciesSet, neat.DefaultStagnation,
-                            NEAT_CONFIG_PATH)
 
-# Create the population
-pop = neat.Population(neat_config)
 
 def draw_text(surface, text, x, y, font_size=20, color=(255, 255, 255)):
     font = pygame.font.SysFont(None, font_size)
@@ -156,7 +153,7 @@ def draw():
     draw_text(screen, "Population: " + str(curr_pop), 400, 650, font_size=40, color=(255, 0, 0))
     pygame.display.update()
 
-def play_game(net=None) -> int:
+def play_game(net = None) -> int:
     # Initial housekeeping
     global curr_pop
 
@@ -166,6 +163,8 @@ def play_game(net=None) -> int:
     clock = pygame.time.Clock()
     game_result = {
         "fitness": 0,
+        "score": 0,
+        "result_notes": "",
         "game_states": [],
     }
     
@@ -179,38 +178,49 @@ def play_game(net=None) -> int:
                 if event.type == pygame.QUIT:
                     running = False
 
+            random_action: bool = False
             if IS_HUMAN:
                 keys = pygame.key.get_pressed()
                 action = get_action(keys)
             else:
                 if ENABLE_EPSILON and random.random() < epsilon:
                     # Choose a random action
-                    # print("Picking random choice")
                     action = random.choice(list(Action))
+                    random_action = True
                 else:
                     # Choose the action suggested by the neural network
-                    # print("We are actually choosing this time")
                     action = get_net_action(net, board.get_state())
             
             if action:
-                board.act(action)
+                try:
+                    board.act(action)
+                except NoOpAction:
+                    # This means that the board didnt change as a result of the action taken.
+                    # If this is a random action, we shouldn't penalize the model for nothing happening.
+                    # So we will not record this as a frame as far as the game is concerned.
+                    if random_action:
+                        # Continue to next loop iteration, to avoid logging this frame and counting it against the model
+                        continue
 
             draw()
             game_result["game_states"].append(list(board.get_state()))
-            game_result["fitness"] = board.score
             if (board.is_done()):
                 raise GameDone
             updates += 1
             if updates > MAX_UPDATES_PER_GAME:
                 # game_result["notes"] = "Game stalemated"
                 print("Something went really wrong here, the network wasnt outputting somehow.")
+                game_result["result_notes"] = "We ran out of time"
                 running = False
     except GameDone:
         # Expected state
         # print("Finished game naturally")
         pass
     finally:
-        file_name = f"{str(board.score)}_{str(curr_pop)}"
+        game_result["score"] = board.score
+        fit = get_fitness(board, game_result)
+        game_result["fitness"] = fit
+        file_name = f"{str(fit)}_{str(curr_pop)}"
         file_name += ".json"
         with open(f"{GAMESTATES_PATH}/gen_{curr_gen}/{file_name}", 'w') as f:
             json.dump(game_result, f, cls=NpEncoder, indent=4)
@@ -265,16 +275,6 @@ def get_action(inputs) -> Action:
     return None
 
 
-# To fix it from doing n-1 checkpoint numbers
-class OneIndexedCheckpointer(neat.Checkpointer):
-    def __init__(self, generation_interval=1, time_interval_seconds=None, filename_prefix="neat-checkpoint-"):
-        super().__init__(generation_interval, time_interval_seconds, filename_prefix)
-
-    def save_checkpoint(self, config, population, species_set, generation):
-        # Increment the generation number by 1 to make it 1-indexed
-        super().save_checkpoint(config, population, species_set, generation + 1)
-
-
 def eval_genomes(genomes, config_tarnished):
     global curr_gen
     global curr_pop
@@ -284,6 +284,8 @@ def eval_genomes(genomes, config_tarnished):
     pathlib.Path(f"{GAMESTATES_PATH}/gen_{curr_gen}").mkdir(parents=True, exist_ok=True)
 
     epsilon = max(EPSILON_END, EPSILON_START * (EPSILON_DECAY ** curr_gen))
+    if ENABLE_EPSILON:
+        print(f"Our new epsilon for {curr_gen} is {epsilon}")
 
     if type(genomes) == dict:
         genomes = list(genomes.items())
@@ -304,34 +306,24 @@ def eval_genomes(genomes, config_tarnished):
 
         assert genome.fitness is not None
 
+    # See if we need to clean up our gamestates
+    # We should only need to prune the same interval that we batch delete, since they should
+    # All roughly be the same size.
+    # Actually, we are going to do it one less, because we want to be able to catch up in case the
+    # games are going longer due to fitter populations learning to survive.
+    if (curr_gen % (BATCH_REMOVE_GENS - 1)) == 0:
+        prune_gamestates()
+
+
 ### Core processing functions ###
 def main():
-    # Add reporters, including a Checkpointer
-    if CACHE_CHECKPOINTS:
-        # Setup checkpoints
-        curr_fitness_checkpoints = f"{CHECKPOINTS_PATH}"
-        pathlib.Path(curr_fitness_checkpoints).mkdir(parents=True, exist_ok=True)
-        # Find the run that we need to use
-        runs = os.listdir(curr_fitness_checkpoints)
-        i = 1
-        for i in range(1, 10):
-            if f"run_{i}" not in runs:
-                break
-        else:
-            # If this happens then I have been running too many runs and I need to think of changing the fitnesss function
-            raise Exception("Youve been trying this fitness function too many times. Fix the problem.")
-        
-        this_runs_checkpoints = f"{curr_fitness_checkpoints}/run_{i}"
-        pathlib.Path(this_runs_checkpoints).mkdir(parents=True, exist_ok=True)
+    global curr_gen
 
-        pop.add_reporter(neat.StdOutReporter(True))
+    pop, start_gen_num = get_pop_and_gen(args)
+    curr_gen = start_gen_num
 
-        checkpointer = OneIndexedCheckpointer(generation_interval=CHECKPOINT_INTERVAL, filename_prefix=f'{this_runs_checkpoints}/neat-checkpoint-')
-        
-        pop.add_reporter(checkpointer)
-    
     try:
-        winner = pop.run(lambda genomes, config: eval_genomes(genomes, config), n=GENERATIONS)
+        winner = pop.run(lambda genomes, config: eval_genomes(genomes, config), n=GENERATIONS - start_gen_num)
     except Exception as e:
         with open("debug.txt", "w") as f:
             f.write(str(e))
@@ -339,8 +331,7 @@ def main():
     pass
 
 def process_statistics():
-    # TODO: This
-    # TODO: Adapt this
+    # TODO: Possibly move this to the files directory
     # Figure out which generations that we need to process.
     existing_gens = os.listdir(GAMESTATES_PATH)
     gen_nums: list[int] = [int(name[4:]) for name in existing_gens]
@@ -451,6 +442,7 @@ def process_statistics():
 #             replay_best_in_gen(gen, trainer, args.best or DEFAULT_NUM_BEST_GENS)
 
 ### End - Core processing functions ###
+
 ### Statistics ###
 def display_stats_from_gen(gen_num):
     # Get most fit populations from gen
@@ -465,7 +457,7 @@ def display_stats_from_gen(gen_num):
             file_name (str): _description_
 
         Returns:
-            tuple[int, int]: _description_
+            tuple[int, int]: (fitness, pop_num)
         """
         index_split = file_name.find("_") # All files are organized by "{fitness}_{population num}"
         # Extension offset because all file names have ".json" on the end
@@ -525,6 +517,8 @@ def display_stats_from_gen(gen_num):
         stats += f"Best tile: {largest_tile}. "
         length = len(game_data["game_states"])
         stats += f"Game Length: {length}"
+        lost_fit = int(game_data["score"]) - int(game_data["fitness"])
+        stats += f"Fitness lost to failed moves: {lost_fit}"
         print(stats)
     
     print("") # Just put a newline after this generation

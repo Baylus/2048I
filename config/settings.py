@@ -7,13 +7,24 @@ NEAT_CONFIG_PATH = "config/neat_config.txt"
 CHECKPOINTS_PATH = "checkpoints/"
 GAMESTATES_PATH = "game_states/"
 
-GENERATIONS = 500
+GENERATIONS = 1000
 # Number of iterations that one model will train before training the other one.
 TRAINING_INTERVAL = 5
 CACHE_CHECKPOINTS = True
 CHECKPOINT_INTERVAL = 10
+RESTORE_CHECKPOINTS = True # Restore checkpoint override
+CHECKPOINT_PREFIX = "neat-checkpoint-"
 
-SAVE_GAMESTATES = False
+### Gamestates
+SAVE_GAMESTATES = True
+BATCH_REMOVE_GENS = 5 # Number of generations to batch delete when appropriate
+# Max size of gamestates folder, in GB
+MAX_SIZE_OF_GAMESTATES = 25
+# The interval at which we should save gamestate generations, incase we want to save
+# some old ones, but not all the unnecessary. 
+# e.g. interval = 5, gens 5, 10, 15, 20, etc. will be saved
+ARCHIVE_GEN_INTERVAL = 10
+###
 
 ### Replays and Statistics
 NUM_BEST_GENS_FOR_STATS = 5 # Number of best generations to show for stats
@@ -22,10 +33,10 @@ REPLAY_TPS = 10
 
 # Epsilon-greedy strategy settings
 ENABLE_EPSILON = True
-EPSILON_START = 1.0  # Initial exploration rate
-EPSILON_END = 0.1    # Final exploration rate
+EPSILON_START = 0.8  # Initial exploration rate
+EPSILON_END = 0.0    # Final exploration rate
 # Started at 0.995
-EPSILON_DECAY = 0.97  # Decay rate per generation
+EPSILON_DECAY = 0.96  # Decay rate per generation
 
 IS_HUMAN = False
 
@@ -33,7 +44,7 @@ IS_HUMAN = False
 
 TPS = 1000 # Ticks per second
 # Might have to change this to max number of consecutive no-ops
-MAX_UPDATES_PER_GAME = 100
+MAX_UPDATES_PER_GAME = 10000
 
 WINDOW_WIDTH = 700
 WINDOW_HEIGHT = 700
@@ -73,3 +84,6 @@ TILE_COLOR = {
 
 FONT_COLOR = (119, 110, 101)
 FONT_SIZE = 75
+
+
+DEBUG = False

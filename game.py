@@ -11,6 +11,10 @@ FONT = pg.font.Font(None, FONT_SIZE)
 class GameDone(Exception):
     pass
 
+class NoOpAction(Exception):
+    pass
+
+
 # Define the game environment
 class Board:
     def __init__(
@@ -84,11 +88,9 @@ class Board:
         elif action == Action.LEFT:
             new_grid = self.move_left(self.grid)
         
-        # print(new_grid)
         if np.all(self.grid == new_grid):
             # We didnt move anything at all, so this wasn't a valid action
-            # print("This grid didnt change at all, so it doesnt count")
-            return
+            raise NoOpAction
 
         self.grid = new_grid
         # Now we have to add a tile to replace
