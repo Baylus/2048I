@@ -15,7 +15,16 @@ CHECKPOINT_INTERVAL = 10
 RESTORE_CHECKPOINTS = True # Restore checkpoint override
 CHECKPOINT_PREFIX = "neat-checkpoint-"
 
-SAVE_GAMESTATES = False
+### Gamestates
+SAVE_GAMESTATES = True
+BATCH_REMOVE_GENS = 5 # Number of generations to batch delete when appropriate
+# Max size of gamestates folder, in GB
+MAX_SIZE_OF_GAMESTATES = 25
+# The interval at which we should save gamestate generations, incase we want to save
+# some old ones, but not all the unnecessary. 
+# e.g. interval = 5, gens 5, 10, 15, 20, etc. will be saved
+ARCHIVE_GEN_INTERVAL = 5
+###
 
 ### Replays and Statistics
 NUM_BEST_GENS_FOR_STATS = 5 # Number of best generations to show for stats

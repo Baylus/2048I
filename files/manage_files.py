@@ -44,6 +44,7 @@ import shutil
 
 from config.settings import GAMESTATES_PATH, BATCH_REMOVE_GENS, MAX_SIZE_OF_GAMESTATES, ARCHIVE_GEN_INTERVAL
 
+#### MANAGE GAME STATES ####
 
 def GetFolderSize(path):
     # Not super important to be quick, as this will only happen once per generation.
@@ -132,3 +133,6 @@ def prune_gamestates():
     if (size > MAX_SIZE_OF_GAMESTATES):
         clean_gamestates()
     pass
+
+
+#### END MANAGE GAME STATES ####
