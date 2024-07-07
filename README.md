@@ -17,4 +17,5 @@ The solution I will transition to after that is DQN (Deep Q-Learning), which I h
 
 # To improve
 - reduce fitness points for every turn that the board does not change
+- Don't record gamestates where nothing changed, to save on gamestate space. Will have to update fitness penalty to track this new system.
 - Utilize Q Deep learning
