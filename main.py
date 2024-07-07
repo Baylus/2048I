@@ -369,8 +369,7 @@ def main():
     pass
 
 def process_statistics():
-    # TODO: This
-    # TODO: Adapt this
+    # TODO: Possibly move this to the files directory
     # Figure out which generations that we need to process.
     existing_gens = os.listdir(GAMESTATES_PATH)
     gen_nums: list[int] = [int(name[4:]) for name in existing_gens]
@@ -481,6 +480,7 @@ def process_statistics():
 #             replay_best_in_gen(gen, trainer, args.best or DEFAULT_NUM_BEST_GENS)
 
 ### End - Core processing functions ###
+
 ### Statistics ###
 def display_stats_from_gen(gen_num):
     # Get most fit populations from gen
@@ -495,7 +495,7 @@ def display_stats_from_gen(gen_num):
             file_name (str): _description_
 
         Returns:
-            tuple[int, int]: _description_
+            tuple[int, int]: (fitness, pop_num)
         """
         index_split = file_name.find("_") # All files are organized by "{fitness}_{population num}"
         # Extension offset because all file names have ".json" on the end

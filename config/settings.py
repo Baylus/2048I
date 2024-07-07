@@ -84,3 +84,6 @@ TILE_COLOR = {
 
 FONT_COLOR = (119, 110, 101)
 FONT_SIZE = 75
+
+
+DEBUG = False

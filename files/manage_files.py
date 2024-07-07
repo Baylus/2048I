@@ -40,9 +40,15 @@ Which of these solutions resonates with you, or do you have any other ideas you'
 """
 import os
 from os.path import join, getsize, isfile, isdir, splitext
-import shutil
+import pathlib
 
 from config.settings import *
+
+def p(s):
+    """Debug Print
+    """
+    if DEBUG:
+        print(s)
 
 #### MANAGE GAME STATES ####
 
@@ -68,10 +74,11 @@ def delete_folder(folder):
             if os.path.isfile(file_path) or os.path.islink(file_path):
                 os.unlink(file_path)
             elif os.path.isdir(file_path):
-                shutil.rmtree(file_path)
+                delete_folder(file_path)
         except Exception as e:
             print('Failed to delete %s. Reason: %s' % (file_path, e))
-    pass
+    pathlib.Path.rmdir(folder)
+
 
 def clean_gamestates():
     """Cleans out gamestates.
@@ -88,10 +95,12 @@ def clean_gamestates():
             5, 10, 13, 14, 15, ...
         Because we removed 10 generations, but saved every 5th one.
     """
+    p("Cleaning gamestates")
     # We know for a fact that we have to remove some generations.
     # Get all generations
     existing_gens = os.listdir(GAMESTATES_PATH)
     gen_nums = [int(name[4:]) for name in existing_gens]
+    p(f"We have {len(gen_nums)} available gen nums before")
     gen_nums.sort()
 
     removed = 0
@@ -102,6 +111,7 @@ def clean_gamestates():
             # We should keep this one around.
             continue
         # delete this generation
+        p(f"Deleting generation {num}")
         delete_folder(f"{GAMESTATES_PATH}/gen_{num}")
         # Housekeeping
         # Remove from original list incase we need to 
@@ -116,6 +126,8 @@ def clean_gamestates():
     if removed >= BATCH_REMOVE_GENS:
         # We removed enough.
         return
+    else:
+        p("We couldn't remove enough generations, we are getting rid of protected generations now")
     
     # We did not remove enough. Start removing the protected generations
     for i in range(BATCH_REMOVE_GENS - removed):
@@ -130,10 +142,9 @@ def prune_gamestates():
     Maybe try to be cheeky and return a guess for how many generations to wait before checking again.
     """
     size = GetFolderSize(GAMESTATES_PATH)
-    if (size > MAX_SIZE_OF_GAMESTATES):
+    if (size > MAX_SIZE_OF_GAMESTATES * (1024 * 1024 * 1024)):
         clean_gamestates()
     pass
-
 
 #### END MANAGE GAME STATES ####
 
@@ -171,3 +182,14 @@ def get_newest_checkpoint_file(files: list[str], prefix: str) -> tuple[str, int]
             file_details = (name, gen)
 
     return file_details
+
+def get_pop_and_checkpoint(cmd_args):
+    """Get the population and checkpoint for our new run.
+
+    Basically should just be everything in the main file before the actual run
+    Args:
+        cmd_args (_type_): _description_
+    """
+    # TODO: This
+
+    pass
