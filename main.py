@@ -319,7 +319,7 @@ def main():
 
     pop, start_gen_num = get_pop_and_gen(args)
     curr_gen = start_gen_num
-    
+
     try:
         winner = pop.run(lambda genomes, config: eval_genomes(genomes, config), n=GENERATIONS - start_gen_num)
     except Exception as e:
@@ -515,7 +515,8 @@ def display_stats_from_gen(gen_num):
         stats += f"Best tile: {largest_tile}. "
         length = len(game_data["game_states"])
         stats += f"Game Length: {length}"
-        stats += f"Fitness lost to failed moves: {game_data["score"] - game_data["fitness"]}"
+        lost_fit = int(game_data["score"]) - int(game_data["fitness"])
+        stats += f"Fitness lost to failed moves: {lost_fit}"
         print(stats)
     
     print("") # Just put a newline after this generation
