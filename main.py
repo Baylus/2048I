@@ -1,15 +1,24 @@
 from argparse import ArgumentParser
+import concurrent.futures
+from contextlib import contextmanager
 from enum import IntEnum, auto
 import json
 import neat
 import numpy as np
 import os
 import pathlib
-import pygame
 from queue import PriorityQueue
 import random
 import shutil
+import signal
 import sys
+import traceback
+
+
+# Silences pygame welcome message
+# https://stackoverflow.com/a/55769463
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+import pygame
 
 from action import Action
 from game import Board, GameDone, NoOpAction
@@ -53,8 +62,15 @@ parser.add_argument("-q", "--quiet",
                     help="don't print status messages to stdout. Unused")
 parser.add_argument("-dc", "--dont_clean", dest="clean", action="store_false", default=True,
                     help="Should we avoid cleaning up our previous gamestates?")
+parser.add_argument("-l", "--parallel", dest="parallel", action="store_true", default=False,
+                    help="Should we run parallel instances of the game simulation?")
+parser.add_argument("-d", "--hide", dest="hide", action="store_true", default=False,
+                    help="Should we hide the game by not drawing the entities?")
 
 args = parser.parse_args()
+
+args.parallel = PARALLEL_OVERRIDE or args.parallel
+args.hide = HIDE_OVERRIDE or args.hide
 
 # Check if args are valid
 if args.stats:
@@ -84,20 +100,22 @@ if args.stats:
 # DELETE GAME STATES #
 # Only delete if we arent replaying, checking stats, and havent specified to not clean
 # if not replays and args.clean and not SAVE_GAMESTATES:
-if args.clean and not args.stats and args.reset and not SAVE_GAMESTATES:
-    folder = GAMESTATES_PATH
-    for filename in os.listdir(folder):
-        file_path = os.path.join(folder, filename)
-        try:
-            if os.path.isfile(file_path) or os.path.islink(file_path):
-                os.unlink(file_path)
-            elif os.path.isdir(file_path):
-                shutil.rmtree(file_path)
-        except Exception as e:
-            print('Failed to delete %s. Reason: %s' % (file_path, e))
+def clean_gamestates():
+    if args.clean and not args.stats and args.reset and not SAVE_GAMESTATES:
+        print("Cleaning game states")
+        folder = GAMESTATES_PATH
+        for filename in os.listdir(folder):
+            file_path = os.path.join(folder, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+            except Exception as e:
+                print('Failed to delete %s. Reason: %s' % (file_path, e))
 
-    # Delete debug file to ensure we arent looking at old exceptions
-    pathlib.Path.unlink("debug.txt", missing_ok=True)
+        # Delete debug file to ensure we arent looking at old exceptions
+        pathlib.Path.unlink("debug.txt", missing_ok=True)
 
 
 ##################
@@ -126,64 +144,62 @@ if BOARD_HEIGHT != BOARD_WIDTH:
 pygame.init()
 
 # Set up the display
-screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-pygame.display.set_caption("2048I")
-
-board = Board()
+if not args.hide:
+    screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+    pygame.display.set_caption("2048I")
 
 # Globals modified and used all over
-curr_pop = 0
-curr_gen = 0
-epsilon = 0
-
-
 
 def draw_text(surface, text, x, y, font_size=20, color=(255, 255, 255)):
     font = pygame.font.SysFont(None, font_size)
     text_surface = font.render(text, True, color)
     surface.blit(text_surface, (x, y))
 
-def draw():
+def draw(board, pop):
     # Fill background
     screen.fill(BACKGROUND_COLOR)
 
     board.draw(screen)
 
-    draw_text(screen, "Generation: " + str(curr_gen), 100, 650, font_size=40, color=(255, 0, 0))
-    draw_text(screen, "Population: " + str(curr_pop), 400, 650, font_size=40, color=(255, 0, 0))
+    draw_text(screen, "Generation: " + str(get_gen.curret), 100, 650, font_size=40, color=(255, 0, 0))
+    draw_text(screen, "Population: " + str(pop), 400, 650, font_size=40, color=(255, 0, 0))
     pygame.display.update()
 
-def play_game(net = None) -> int:
-    # Initial housekeeping
-    global curr_pop
-
-    curr_pop += 1
-    board.reset()
-
-    clock = pygame.time.Clock()
-    game_result = {
-        "fitness": 0,
-        "score": 0,
-        "result_notes": "",
-        "game_states": [],
-    }
-    
-    # Main game loop
-    running = True
-    updates = 0
+def play_game(net, pop) -> int:
     try:
+        # Initial housekeeping
+        print("Starting Board")
+        board = Board()
+        board.reset()
+        gen = get_gen.current
+
+        print("before clock")
+        clock = pygame.time.Clock()
+        game_result = {
+            "fitness": 0,
+            "score": 0,
+            "result_notes": "",
+            "game_states": [],
+        }
+        print("About to run game")
+
+        # Main game loop
+        running = True
+        updates = 0
         while running:
             clock.tick(TPS)
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
+            if not args.hide:
+                # We cannot get events if we are not displaying a window
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        running = False
 
             random_action: bool = False
             if IS_HUMAN:
                 keys = pygame.key.get_pressed()
                 action = get_action(keys)
             else:
-                if ENABLE_EPSILON and random.random() < epsilon:
+                if ENABLE_EPSILON and random.random() < epsilon():
                     # Choose a random action
                     action = random.choice(list(Action))
                     random_action = True
@@ -201,8 +217,10 @@ def play_game(net = None) -> int:
                     if random_action:
                         # Continue to next loop iteration, to avoid logging this frame and counting it against the model
                         continue
-
-            draw()
+            
+            if not args.hide:
+                draw(board, pop)
+            
             game_result["game_states"].append(list(board.get_state()))
             if (board.is_done()):
                 raise GameDone
@@ -214,15 +232,20 @@ def play_game(net = None) -> int:
                 running = False
     except GameDone:
         # Expected state
-        # print("Finished game naturally")
         pass
+    except Exception:
+        print("Something happened")
+        with open("debug.txt", "w") as f:
+        # with open("debug_game.txt", "w") as f:
+            f.write(traceback.format_exc())
+        raise
     finally:
         game_result["score"] = board.score
         fit = get_fitness(board, game_result)
         game_result["fitness"] = fit
-        file_name = f"{str(fit)}_{str(curr_pop)}"
+        file_name = f"{str(fit)}_{str(pop)}"
         file_name += ".json"
-        with open(f"{GAMESTATES_PATH}/gen_{curr_gen}/{file_name}", 'w') as f:
+        with open(f"{GAMESTATES_PATH}/gen_{gen}/{file_name}", 'w') as f:
             json.dump(game_result, f, cls=NpEncoder, indent=4)
     
     return int(game_result["fitness"])
@@ -274,18 +297,14 @@ def get_action(inputs) -> Action:
     last_action = action
     return None
 
+def eval_genomes(genomes, config):
+    gen = get_gen()
+    pop = 0
+    pathlib.Path(f"{GAMESTATES_PATH}/gen_{gen}").mkdir(parents=True, exist_ok=True)
 
-def eval_genomes(genomes, config_tarnished):
-    global curr_gen
-    global curr_pop
-    global epsilon
-    curr_pop = 0
-    curr_gen += 1
-    pathlib.Path(f"{GAMESTATES_PATH}/gen_{curr_gen}").mkdir(parents=True, exist_ok=True)
-
-    epsilon = max(EPSILON_END, EPSILON_START * (EPSILON_DECAY ** curr_gen))
+    ep = epsilon(gen)
     if ENABLE_EPSILON:
-        print(f"Our new epsilon for {curr_gen} is {epsilon}")
+        print(f"Our new epsilon for {gen} is {ep}")
 
     if type(genomes) == dict:
         genomes = list(genomes.items())
@@ -293,16 +312,66 @@ def eval_genomes(genomes, config_tarnished):
     # Initializing everything to 0 and not None
     for _, genome in genomes:
         genome.fitness = 0
+    
+    results: dict[int, int] = {}
+    if args.parallel:
+        # # Create a global flag for termination
+        # terminate_flag = False
 
-    for (genome_id_player, genome) in genomes:
-        # Create separate neural networks for player and enemy
-        player_net = neat.nn.FeedForwardNetwork.create(genome, config_tarnished)
+        # def handle_termination(signum, frame):
+        #     global terminate_flag
+        #     terminate_flag = True
+        #     print("Termination signal received. Cleaning up...")
+
+        # # Register signal handlers
+        # signal.signal(signal.SIGINT, handle_termination)
+        # signal.signal(signal.SIGTERM, handle_termination)
+
+        # @contextmanager
+        # def terminating_executor(max_workers):
+        #     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+        #         try:
+        #             yield executor
+        #         finally:
+        #             if terminate_flag:
+        #                 executor.shutdown(wait=True)
+        #                 print("Executor shut down gracefully.")
+        #                 sys.exit(0)
         
-        # Run the simulation
-        player_fitness = play_game(player_net)
+        # We need to execute the training in parallel
+        # Create a process pool for parallel execution
+        futures = []
+        # with terminating_executor(max_workers=MAX_WORKERS) as executor:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            for (genome_id, genome) in genomes:
+                pop += 1
+                net = neat.nn.FeedForwardNetwork.create(genome, config)
+                
+                # Schedule the game simulation to run in parallel
+                # We need to give it the pop, as parallel is gonna mess with it a lot
+                future = executor.submit(play_game, net, pop)
+                futures.append((future, genome_id))
+
+            # Collect results as they complete
+            for future, genome_id in futures:
+                result = future.result()
+                results[genome_id] = result
+
+    for (genome_id, genome) in genomes:
+        if results:
+            # We already did parallel execution, log results
+            fitness = results[genome_id]
+            pass
+        else:
+            # Create separate neural networks for player and enemy
+            player_net = neat.nn.FeedForwardNetwork.create(genome, config)
+            
+            # Run the simulation
+            pop += 1
+            fitness = play_game(player_net, pop)
         
         # Assign fitness to each genome
-        genome.fitness = player_fitness
+        genome.fitness = fitness
 
         assert genome.fitness is not None
 
@@ -311,22 +380,22 @@ def eval_genomes(genomes, config_tarnished):
     # All roughly be the same size.
     # Actually, we are going to do it one less, because we want to be able to catch up in case the
     # games are going longer due to fitter populations learning to survive.
-    if (curr_gen % (BATCH_REMOVE_GENS - 1)) == 0:
+    if (gen % (BATCH_REMOVE_GENS - 1)) == 0:
         prune_gamestates()
 
 
 ### Core processing functions ###
 def main():
-    global curr_gen
+    clean_gamestates()
 
     pop, start_gen_num = get_pop_and_gen(args)
-    curr_gen = start_gen_num
+    get_gen.current = start_gen_num
 
     try:
         winner = pop.run(lambda genomes, config: eval_genomes(genomes, config), n=GENERATIONS - start_gen_num)
-    except Exception as e:
+    except Exception:
         with open("debug.txt", "w") as f:
-            f.write(str(e))
+            f.write(traceback.format_exc())
         raise
     pass
 
@@ -681,6 +750,33 @@ def display_stats_from_gen(gen_num):
 
 ### End - Replays ###
 
+def epsilon(gen = None):
+    """Current epsilon value. Only sets if given a generation, to avoid repeated calculations
+
+    Args:
+        gen (_type_, optional): _description_. Defaults to None.
+
+    Returns:
+        _type_: _description_
+    """
+    if not hasattr(epsilon, "current"):
+        epsilon.current = 0  # it doesn't exist yet, so initialize it
+    if gen:
+        epsilon.current = max(EPSILON_END, EPSILON_START * (EPSILON_DECAY ** gen))
+    return epsilon.current
+
+def get_gen() -> int:
+    """Really strange way of maintaining a global state for the current generation.
+    Set using get_gen.current = X. Anytime retrieving will increment generation, so
+    likely will need to use offset to get the right value.
+    See this for details: https://stackoverflow.com/a/279597
+    Returns:
+        int: Current generation
+    """
+    if not hasattr(get_gen, "current"):
+        get_gen.current = 0  # it doesn't exist yet, so initialize it
+    get_gen.current += 1
+    return get_gen.current
 
 if __name__ == "__main__":
     if args.stats:
