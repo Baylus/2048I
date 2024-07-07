@@ -284,6 +284,8 @@ def eval_genomes(genomes, config_tarnished):
     pathlib.Path(f"{GAMESTATES_PATH}/gen_{curr_gen}").mkdir(parents=True, exist_ok=True)
 
     epsilon = max(EPSILON_END, EPSILON_START * (EPSILON_DECAY ** curr_gen))
+    if ENABLE_EPSILON:
+        print(f"Our new epsilon for {curr_gen} is {epsilon}")
 
     if type(genomes) == dict:
         genomes = list(genomes.items())
