@@ -201,6 +201,12 @@ def get_pop_and_gen(cmd_args) -> tuple[int, int]:
     Returns:
         (int, int): (population to use, generation we are starting on)
     """
+    # Create the population
+    neat_config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
+                                neat.DefaultSpeciesSet, neat.DefaultStagnation,
+                                NEAT_CONFIG_PATH)
+    pop = neat.Population(neat_config)
+    start_gen_num = 0
     # Add reporters, including a Checkpointer
     if CACHE_CHECKPOINTS:
         # Setup checkpoints
@@ -242,16 +248,9 @@ def get_pop_and_gen(cmd_args) -> tuple[int, int]:
         
         # TODO: Add this to allow us to record to a output file too
         # https://stackoverflow.com/a/14906787
-        pop.add_reporter(neat.StdOutReporter(True))
-        pop.add_reporter(neat.StatisticsReporter())
         pop.add_reporter(checkpointer)
-    else:
-        # We are not checkpointing
-        # Create the population
-        neat_config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
-                                    neat.DefaultSpeciesSet, neat.DefaultStagnation,
-                                    NEAT_CONFIG_PATH)
-        pop = neat.Population(neat_config)
-        start_gen_num = 0
     
+    pop.add_reporter(neat.StdOutReporter(True))
+    pop.add_reporter(neat.StatisticsReporter())
+
     return pop, start_gen_num
