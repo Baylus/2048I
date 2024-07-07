@@ -16,6 +16,7 @@ from game import Board, GameDone, NoOpAction
 from fitness import get_fitness
 
 from config.settings import *
+from files.manage_files import get_newest_checkpoint_file
 
 parser = ArgumentParser()
 parser.add_argument("-r", "--reset", dest="reset", action="store_true", default=False,
@@ -348,7 +349,6 @@ def main():
                 checkpointer = neat.Checkpointer(generation_interval=CHECKPOINT_INTERVAL, filename_prefix=f'{this_runs_checkpoints}/{CHECKPOINT_PREFIX}')
                 print(f"We are using {checkpoint}")
                 curr_gen = start_gen_num
-            pass
         
         if not checkpointer:
             # If we are not resuming previous checkpoint, create it one indexed so we don't get weird numbers
@@ -729,39 +729,6 @@ class OneIndexedCheckpointer(neat.Checkpointer):
     def save_checkpoint(self, config, population, species_set, generation):
         # Increment the generation number by 1 to make it 1-indexed
         super().save_checkpoint(config, population, species_set, generation + 1)
-
-
-def get_newest_checkpoint_file(files: list[str], prefix: str) -> tuple[str, int]:
-    """Gets the most recent checkpoint from the previous run the resume the training.
-
-    Args:
-        files (list[str]): _description_
-        prefix (str): _description_
-
-    Returns:
-        tuple[str, int]: <file name, generation number>
-    """
-    def get_gen_num_from_name(file_name: str) -> int:
-        if file_name[-1] == '-':
-            raise ValueError(f"There is something really wrong. This checkpoint file is missing a gen number: {file_name}")
-        max_gen_num_len = len(str(GENERATIONS))
-        postfix = file_name[ -max_gen_num_len :]
-        for i in range(len(postfix)):
-            if postfix[i] == '-':
-                # We found the dash, the rest is the gen number
-                return int(postfix[i+1:])
-        else:
-            # We had no '-', so this whole thing must be the gen number
-            return int(postfix)
-    
-    file_details = ["", 0]
-    prefixed = [fn for fn in files if prefix in fn] # Files containing the prefix
-    for name in prefixed:
-        gen = get_gen_num_from_name(name)
-        if gen > file_details[1]:
-            file_details = (name, gen)
-
-    return file_details
 
 
 ### End - Checkpoint ###

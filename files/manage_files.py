@@ -42,7 +42,7 @@ import os
 from os.path import join, getsize, isfile, isdir, splitext
 import shutil
 
-from config.settings import GAMESTATES_PATH, BATCH_REMOVE_GENS, MAX_SIZE_OF_GAMESTATES, ARCHIVE_GEN_INTERVAL
+from config.settings import *
 
 #### MANAGE GAME STATES ####
 
@@ -136,3 +136,38 @@ def prune_gamestates():
 
 
 #### END MANAGE GAME STATES ####
+
+
+
+
+def get_newest_checkpoint_file(files: list[str], prefix: str) -> tuple[str, int]:
+    """Gets the most recent checkpoint from the previous run the resume the training.
+
+    Args:
+        files (list[str]): _description_
+        prefix (str): _description_
+
+    Returns:
+        tuple[str, int]: <file name, generation number>
+    """
+    def get_gen_num_from_name(file_name: str) -> int:
+        if file_name[-1] == '-':
+            raise ValueError(f"There is something really wrong. This checkpoint file is missing a gen number: {file_name}")
+        max_gen_num_len = len(str(GENERATIONS))
+        postfix = file_name[ -max_gen_num_len :]
+        for i in range(len(postfix)):
+            if postfix[i] == '-':
+                # We found the dash, the rest is the gen number
+                return int(postfix[i+1:])
+        else:
+            # We had no '-', so this whole thing must be the gen number
+            return int(postfix)
+    
+    file_details = ["", 0]
+    prefixed = [fn for fn in files if prefix in fn] # Files containing the prefix
+    for name in prefixed:
+        gen = get_gen_num_from_name(name)
+        if gen > file_details[1]:
+            file_details = (name, gen)
+
+    return file_details
