@@ -16,7 +16,7 @@ from game import Board, GameDone, NoOpAction
 from fitness import get_fitness
 
 from config.settings import *
-from files.manage_files import get_newest_checkpoint_file, prune_gamestates
+from files.manage_files import prune_gamestates, get_pop_and_gen
 
 parser = ArgumentParser()
 parser.add_argument("-r", "--reset", dest="reset", action="store_true", default=False,
@@ -136,12 +136,7 @@ curr_pop = 0
 curr_gen = 0
 epsilon = 0
 
-neat_config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
-                            neat.DefaultSpeciesSet, neat.DefaultStagnation,
-                            NEAT_CONFIG_PATH)
 
-# Create the population
-pop = neat.Population(neat_config)
 
 def draw_text(surface, text, x, y, font_size=20, color=(255, 255, 255)):
     font = pygame.font.SysFont(None, font_size)
@@ -320,54 +315,10 @@ def eval_genomes(genomes, config_tarnished):
 
 ### Core processing functions ###
 def main():
-    global pop
     global curr_gen
 
-    # Add reporters, including a Checkpointer
-    if CACHE_CHECKPOINTS:
-        # Setup checkpoints
-        curr_fitness_checkpoints = f"{CHECKPOINTS_PATH}"
-        pathlib.Path(curr_fitness_checkpoints).mkdir(parents=True, exist_ok=True)
-        # Find the run that we need to use
-        runs = os.listdir(curr_fitness_checkpoints)
-        run_val = 1
-        for i in range(1, 25):
-            if f"run_{i}" not in runs:
-                if not RESTORE_CHECKPOINTS or args.reset:
-                    # We are not restoring from checkpoints, so we need to make a new directory, which would be the i'th run dir
-                    run_val = i
-                break
-            # Store this int in case we need to restore to a previous checkpoint
-            run_val = i
-        else:
-            raise Exception("Try clearing empty run directories or archiving some")
-        
-        this_runs_checkpoints = f"{curr_fitness_checkpoints}/run_{run_val}"
-        print(f"We found our run folder is {run_val}")
-        pathlib.Path(this_runs_checkpoints).mkdir(parents=True, exist_ok=True)
-        start_gen_num = 0
-        checkpointer = None
-        if RESTORE_CHECKPOINTS and not args.reset:
-            # We gotta find the right run to restore
-            existing_checkpoint_files = os.listdir(this_runs_checkpoints)
-            print(f"This is our existing checkpoints from {this_runs_checkpoints}:\n{existing_checkpoint_files}")
-            if existing_checkpoint_files:
-                # Since we have checkpoints, we need to actually initialize the population with them.
-                checkpoint, start_gen_num = get_newest_checkpoint_file(existing_checkpoint_files, CHECKPOINT_PREFIX)
-                pop = neat.Checkpointer.restore_checkpoint(f"{this_runs_checkpoints}/{checkpoint}")
-                checkpointer = neat.Checkpointer(generation_interval=CHECKPOINT_INTERVAL, filename_prefix=f'{this_runs_checkpoints}/{CHECKPOINT_PREFIX}')
-                print(f"We are using {checkpoint}")
-                curr_gen = start_gen_num
-        
-        if not checkpointer:
-            # If we are not resuming previous checkpoint, create it one indexed so we don't get weird numbers
-            checkpointer = OneIndexedCheckpointer(generation_interval=CHECKPOINT_INTERVAL, filename_prefix=f'{this_runs_checkpoints}/neat-checkpoint-')
-        
-        # TODO: Add this to allow us to record to a output file too
-        # https://stackoverflow.com/a/14906787
-        pop.add_reporter(neat.StdOutReporter(True))
-        pop.add_reporter(neat.StatisticsReporter())
-        pop.add_reporter(checkpointer)
+    pop, start_gen_num = get_pop_and_gen(args)
+    curr_gen = start_gen_num
     
     try:
         winner = pop.run(lambda genomes, config: eval_genomes(genomes, config), n=GENERATIONS - start_gen_num)
@@ -726,21 +677,6 @@ def display_stats_from_gen(gen_num):
 #         replay_game(game_data)
 
 ### End - Replays ###
-
-### Checkpoint ###
-
-
-# To fix it from doing n-1 checkpoint numbers
-class OneIndexedCheckpointer(neat.Checkpointer):
-    def __init__(self, generation_interval=1, time_interval_seconds=None, filename_prefix="neat-checkpoint-"):
-        super().__init__(generation_interval, time_interval_seconds, filename_prefix)
-
-    def save_checkpoint(self, config, population, species_set, generation):
-        # Increment the generation number by 1 to make it 1-indexed
-        super().save_checkpoint(config, population, species_set, generation + 1)
-
-
-### End - Checkpoint ###
 
 
 if __name__ == "__main__":
