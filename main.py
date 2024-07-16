@@ -323,7 +323,7 @@ def eval_genomes(genomes, config):
                 future = executor.submit(play_game, net, int(pop_num), gen, ep)
                 futures[future] = genome_id
                 
-            print("We made all the futures, now handle getting the results.")
+            logger.debug("We made all the futures, now handle getting the results.")
             # Collect results as they complete
             for future in concurrent.futures.as_completed(futures):
                 try:
