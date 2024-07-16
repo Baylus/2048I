@@ -30,7 +30,7 @@ ARCHIVE_GEN_INTERVAL = 10
 PARALLEL_OVERRIDE = False
 HIDE_OVERRIDE = False
 
-MAX_WORKERS = 1
+MAX_WORKERS = 5
 ### END
 
 ### Replays and Statistics
