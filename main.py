@@ -115,9 +115,9 @@ def clean_gamestates():
             except Exception as e:
                 print('Failed to delete %s. Reason: %s' % (file_path, e))
 
-        # Delete debug file to ensure we arent looking at old exceptions
-        pathlib.Path.unlink("debug.txt", missing_ok=True)
-        pathlib.Path.unlink("debug.log", missing_ok=True)
+    # Delete debug file to ensure we arent looking at old exceptions
+    pathlib.Path.unlink("debug.txt", missing_ok=True)
+    pathlib.Path.unlink("debug.log", missing_ok=True)
 
 def setup_logger():
     logger = logging.getLogger('genome_logger')
@@ -128,8 +128,8 @@ def setup_logger():
     f_handler = logging.FileHandler('debug.log')
     
     # Set levels for handlers
-    c_handler.setLevel(logging.DEBUG)
-    f_handler.setLevel(logging.DEBUG)
+    c_handler.setLevel(logging.WARNING)
+    f_handler.setLevel(logging.INFO)
     
     # Create formatters and add them to handlers
     c_format = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -172,7 +172,9 @@ pygame.init()
 
 if __name__ == "__main__":
     clean_gamestates()
-    logger = setup_logger()
+
+# Logger enforces singleton, so should be safe to include as global
+logger = setup_logger()
 
 # Set up the display
 if not args.hide:
@@ -295,8 +297,8 @@ def eval_genomes(genomes, config):
             print("Termination signal received. Cleaning up...")
 
         # Register signal handlers
-        # signal.signal(signal.SIGINT, handle_termination)
-        # signal.signal(signal.SIGTERM, handle_termination)
+        signal.signal(signal.SIGINT, handle_termination)
+        signal.signal(signal.SIGTERM, handle_termination)
 
         @contextmanager
         def terminating_executor(max_workers):
@@ -311,43 +313,36 @@ def eval_genomes(genomes, config):
         
         # We need to execute the training in parallel
         # Create a process pool for parallel execution
-        futures = []
-        # for (genome_id, genome) in genomes:
-        #     print("testing entirely out of parallel loop.")
-        #     net = neat.nn.FeedForwardNetwork.create(genome, config)
-        #     print(play_game(net, pop_num, gen, ep))
-        # with terminating_executor(max_workers=MAX_WORKERS) as executor:
-        with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {}
+        with terminating_executor(max_workers=MAX_WORKERS) as executor:
             for (genome_id, genome) in genomes:
                 pop_num += 1
-                print("Creating network for parallel execution")
                 net = neat.nn.FeedForwardNetwork.create(genome, config)
-                print(f"Created network, submitting task for genome {genome_id}")
                 # Schedule the game simulation to run in parallel
                 # We need to give it the pop_num, as parallel is gonna mess with it a lot
-                # print(f"DEBUG: Manually running game. Genome {genome_id} has fitness: {play_game(net, pop_num, gen, ep)}")
                 future = executor.submit(play_game, net, int(pop_num), gen, ep)
-                logger.info(f"Submitting genome {genome_id} as population {pop_num}")
-                futures.append((future, genome_id))
-                # print(f"Submitted task for genome {genome_id}\n")
-
+                futures[future] = genome_id
+                
             print("We made all the futures, now handle getting the results.")
             # Collect results as they complete
-            for future, genome_id in futures:
+            for future in concurrent.futures.as_completed(futures):
                 try:
-                    logger.debug(f"Going to grab result for genome {genome_id}")
-                    result = future.result()
-                    logger.warn(f"Got the result")
-                    results[genome_id] = result
-                    logger.debug("####################################################################################"
-                          + "####################################################################################"
-                          + f"###################### We actually got results for genome {genome_id} in gen {gen} #######################################"
-                          + "####################################################################################"
-                          + "####################################################################################"
-                          )
+                    fit = future.result()
+                    genome_id = futures[future]
+                    results[genome_id] = fit
                 except Exception as e:
-                    # logger.exception(f"Exception getting result for genome {genome_id}: {e}")
-                    pass
+                    logger.exception(f"Exception getting result for genome {genome_id}: {e}")
+                    raise
+                
+                # It is inconceivable with the number of fitness modifications that tarnished has a fitness 0...
+                # While it could be possible for us to reach 0 at some point, its extremely unlikely, as its only really
+                # feasible at the start if the network continuously outputs one input. However, this is solved with us 
+                # using epsilon training, as it gives us time in the beginning while it trains to avoid situations like 
+                # this. So only raise an error if the epsilon training is active and it still hit 0, as that means we 
+                # failed to assign it somehow.
+                # IMPORTANT: This may change when we switch to Deep Q-Learning, as I do not know how that works, but we likely
+                # wont be using epsilon training when we implement that.
+                assert genome.fitness or ENABLE_EPSILON, "We failed to retrieve/assign the fitness, or we need to buy a lottery ticket"
 
     pop_num = 0
     for (genome_id, genome) in genomes:
@@ -368,7 +363,9 @@ def eval_genomes(genomes, config):
         # Assign fitness to each genome
         genome.fitness = fitness
 
-        assert genome.fitness is not None
+        # It is inconceivable with the number of fitness modifications that tarnished has a fitness 0...
+        # See parallel for more info
+        assert genome.fitness or ENABLE_EPSILON, "We failed to retrieve/assign the fitness, or we need to buy a lottery ticket"
 
     # See if we need to clean up our gamestates
     # We should only need to prune the same interval that we batch delete, since they should
@@ -846,4 +843,4 @@ if __name__ == "__main__":
 
 
 pygame.quit()
-sys.exit()
+# sys.exit()
