@@ -1,15 +1,25 @@
 from argparse import ArgumentParser
+import concurrent.futures
+from contextlib import contextmanager
 from enum import IntEnum, auto
 import json
+import logging
 import neat
 import numpy as np
 import os
 import pathlib
-import pygame
 from queue import PriorityQueue
 import random
 import shutil
+import signal
 import sys
+import traceback
+
+
+# Silences pygame welcome message
+# https://stackoverflow.com/a/55769463
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+import pygame
 
 from action import Action
 from game import Board, GameDone, NoOpAction
@@ -36,14 +46,14 @@ parser.add_argument("-r", "--reset", dest="reset", action="store_true", default=
 # parser.add_argument("-g", "--generations", dest="gens", default=None, type=int, nargs='*',
 #                     help=generations_help)
 ### Statistics ###
-statistics_help = """\
+statistics_help = """
 Will we be printing out the statistics for the generations? Will show results from least to greatest generation number
 Providing no integers will process all generations
 Provide 1 int just to show the last X generations.
 Provide 2 ints; number of generations to summarize and the other for interval of generations to display.
 Prov
-    e.g. -s 5 5. Will show statistics for 5 generations, at an interval of 5. with 100 generations, the \
-\ \ generations statistics shown would be 80, 85, 90, 95, 100.
+    e.g. -s 5 5. Will show statistics for 5 generations, at an interval of 5. with 100 generations, the
+    generations statistics shown would be 80, 85, 90, 95, 100.
 0 for the number of generations means all generations will be shown. 0 for interval is unacceptable.
 """
 parser.add_argument("-s", "--stats", dest="stats", default=None, type=int, nargs='*',
@@ -53,8 +63,15 @@ parser.add_argument("-q", "--quiet",
                     help="don't print status messages to stdout. Unused")
 parser.add_argument("-dc", "--dont_clean", dest="clean", action="store_false", default=True,
                     help="Should we avoid cleaning up our previous gamestates?")
+parser.add_argument("-l", "--parallel", dest="parallel", action="store_true", default=False,
+                    help="Should we run parallel instances of the game simulation?")
+parser.add_argument("-d", "--hide", dest="hide", action="store_true", default=False,
+                    help="Should we hide the game by not drawing the entities?")
 
 args = parser.parse_args()
+
+args.parallel = PARALLEL_OVERRIDE or args.parallel
+args.hide = HIDE_OVERRIDE or args.hide or args.parallel
 
 # Check if args are valid
 if args.stats:
@@ -84,20 +101,48 @@ if args.stats:
 # DELETE GAME STATES #
 # Only delete if we arent replaying, checking stats, and havent specified to not clean
 # if not replays and args.clean and not SAVE_GAMESTATES:
-if args.clean and not args.stats and args.reset and not SAVE_GAMESTATES:
-    folder = GAMESTATES_PATH
-    for filename in os.listdir(folder):
-        file_path = os.path.join(folder, filename)
-        try:
-            if os.path.isfile(file_path) or os.path.islink(file_path):
-                os.unlink(file_path)
-            elif os.path.isdir(file_path):
-                shutil.rmtree(file_path)
-        except Exception as e:
-            print('Failed to delete %s. Reason: %s' % (file_path, e))
+def clean_gamestates():
+    if args.clean and not args.stats and args.reset and not SAVE_GAMESTATES:
+        print("Cleaning game states")
+        folder = GAMESTATES_PATH
+        for filename in os.listdir(folder):
+            file_path = os.path.join(folder, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+            except Exception as e:
+                print('Failed to delete %s. Reason: %s' % (file_path, e))
 
     # Delete debug file to ensure we arent looking at old exceptions
     pathlib.Path.unlink("debug.txt", missing_ok=True)
+    pathlib.Path.unlink("debug.log", missing_ok=True)
+
+def setup_logger():
+    logger = logging.getLogger('genome_logger')
+    logger.setLevel(logging.DEBUG)
+    
+    # Create handlers
+    c_handler = logging.StreamHandler()
+    f_handler = logging.FileHandler('debug.log')
+    
+    # Set levels for handlers
+    c_handler.setLevel(logging.WARNING)
+    f_handler.setLevel(logging.INFO)
+    
+    # Create formatters and add them to handlers
+    c_format = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    f_format = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    
+    c_handler.setFormatter(c_format)
+    f_handler.setFormatter(f_format)
+    
+    # Add handlers to the logger
+    logger.addHandler(c_handler)
+    logger.addHandler(f_handler)
+    
+    return logger
 
 
 ##################
@@ -125,66 +170,54 @@ if BOARD_HEIGHT != BOARD_WIDTH:
 # Initialize Pygame
 pygame.init()
 
-# Set up the display
-screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-pygame.display.set_caption("2048I")
+if __name__ == "__main__":
+    clean_gamestates()
 
-board = Board()
+# Logger enforces singleton, so should be safe to include as global
+logger = setup_logger()
+
+# Set up the display
+if not args.hide:
+    screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+    pygame.display.set_caption("2048I")
 
 # Globals modified and used all over
-curr_pop = 0
-curr_gen = 0
-epsilon = 0
 
-
-
-def draw_text(surface, text, x, y, font_size=20, color=(255, 255, 255)):
-    font = pygame.font.SysFont(None, font_size)
-    text_surface = font.render(text, True, color)
-    surface.blit(text_surface, (x, y))
-
-def draw():
-    # Fill background
-    screen.fill(BACKGROUND_COLOR)
-
-    board.draw(screen)
-
-    draw_text(screen, "Generation: " + str(curr_gen), 100, 650, font_size=40, color=(255, 0, 0))
-    draw_text(screen, "Population: " + str(curr_pop), 400, 650, font_size=40, color=(255, 0, 0))
-    pygame.display.update()
-
-def play_game(net = None) -> int:
-    # Initial housekeeping
-    global curr_pop
-
-    curr_pop += 1
-    board.reset()
-
-    clock = pygame.time.Clock()
-    game_result = {
-        "fitness": 0,
-        "score": 0,
-        "result_notes": "",
-        "game_states": [],
-    }
-    
-    # Main game loop
-    running = True
-    updates = 0
+def play_game(net, pop, gen, ep) -> int:
     try:
+        # Initial housekeeping
+        # logger.debug("Starting Board")
+        board = Board()
+        board.reset()
+        logger.debug(f"Generation: {gen}, Population: {pop}")
+
+        # logger.debug("before clock")
+        clock = pygame.time.Clock()
+        game_result = {
+            "fitness": 0,
+            "score": 0,
+            "result_notes": "",
+            "game_states": [],
+        }
+        logger.debug("About to run game")
+
+        # Main game loop
+        running = True
+        updates = 0
         while running:
             clock.tick(TPS)
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
+            if not args.hide:
+                # We cannot get events if we are not displaying a window
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        running = False
 
             random_action: bool = False
             if IS_HUMAN:
                 keys = pygame.key.get_pressed()
                 action = get_action(keys)
             else:
-                if ENABLE_EPSILON and random.random() < epsilon:
-                    # Choose a random action
+                if ENABLE_EPSILON and random.random() < ep:
                     action = random.choice(list(Action))
                     random_action = True
                 else:
@@ -201,91 +234,49 @@ def play_game(net = None) -> int:
                     if random_action:
                         # Continue to next loop iteration, to avoid logging this frame and counting it against the model
                         continue
-
-            draw()
+            
+            if not args.hide:
+                draw(board, pop)
+            
             game_result["game_states"].append(list(board.get_state()))
             if (board.is_done()):
                 raise GameDone
             updates += 1
             if updates > MAX_UPDATES_PER_GAME:
                 # game_result["notes"] = "Game stalemated"
-                print("Something went really wrong here, the network wasnt outputting somehow.")
+                logger.debug("Something went really wrong here, the network wasnt outputting somehow.")
                 game_result["result_notes"] = "We ran out of time"
                 running = False
     except GameDone:
         # Expected state
-        # print("Finished game naturally")
         pass
+    except Exception:
+        logger.debug("Something happened")
+        with open("game_debug.txt", "w") as f:
+        # with open("debug_game.txt", "w") as f:
+            f.write(traceback.format_exc())
+        raise
     finally:
         game_result["score"] = board.score
         fit = get_fitness(board, game_result)
         game_result["fitness"] = fit
-        file_name = f"{str(fit)}_{str(curr_pop)}"
+        file_name = f"{str(fit)}_{str(pop)}"
         file_name += ".json"
-        with open(f"{GAMESTATES_PATH}/gen_{curr_gen}/{file_name}", 'w') as f:
+        logger.debug(f"We are trying to submit our gamestate for pop {pop} in gen {gen}")
+        with open(f"{GAMESTATES_PATH}/gen_{gen}/{file_name}", 'w') as f:
             json.dump(game_result, f, cls=NpEncoder, indent=4)
     
+    logger.debug(f"Returning result {int(game_result["fitness"])}")
     return int(game_result["fitness"])
 
-NETWORK_OUTPUT_MAP = [
-    Action.UP,
-    Action.RIGHT,
-    Action.DOWN,
-    Action.LEFT,
-]
+def eval_genomes(genomes, config):
+    gen = get_gen()
+    pop_num = 0
+    pathlib.Path(f"{GAMESTATES_PATH}/gen_{gen}").mkdir(parents=True, exist_ok=True)
 
-def get_net_action(net, inputs) -> Action:
-    # Now get the recommended outputs
-    outputs = net.activate(inputs)
-    for i in range(len(outputs)):
-        if outputs[i]:
-            return NETWORK_OUTPUT_MAP[i]
-    return None
-
-last_action = None
-
-def get_action(inputs) -> Action:
-    """Determine action to do
-
-    Args:
-        inputs (_type_): keys being pressed
-    """
-    global last_action
-
-    action = None
-    if inputs[pygame.K_w]: # W
-        action = Action.UP
-    elif inputs[pygame.K_s]: # S
-        action = Action.DOWN
-    elif inputs[pygame.K_a]: # A
-        action = Action.LEFT
-    elif inputs[pygame.K_d]: # D
-        action = Action.RIGHT
-    
-    if action:
-        print(f"This is our action {action}")
-    # This makes it so that you can't just hold down a key and it will continue to spam the inputs
-    # Only useful for user interactions, as the network will be able to keep up. Shocked it runs so fast tho
-    if action and action != last_action:
-        # These are different, and we found an action, so we can actually use it
-        last_action = action
-        return action
-
-    last_action = action
-    return None
-
-
-def eval_genomes(genomes, config_tarnished):
-    global curr_gen
-    global curr_pop
-    global epsilon
-    curr_pop = 0
-    curr_gen += 1
-    pathlib.Path(f"{GAMESTATES_PATH}/gen_{curr_gen}").mkdir(parents=True, exist_ok=True)
-
-    epsilon = max(EPSILON_END, EPSILON_START * (EPSILON_DECAY ** curr_gen))
+    ep = epsilon(gen)
     if ENABLE_EPSILON:
-        print(f"Our new epsilon for {curr_gen} is {epsilon}")
+        print(f"Our new epsilon for {gen} is {ep}")
 
     if type(genomes) == dict:
         genomes = list(genomes.items())
@@ -293,40 +284,108 @@ def eval_genomes(genomes, config_tarnished):
     # Initializing everything to 0 and not None
     for _, genome in genomes:
         genome.fitness = 0
+    
+    results: dict[int, int] = None
+    if args.parallel:
+        results = {}
+        # Create a global flag for termination
+        terminate_flag = False
 
-    for (genome_id_player, genome) in genomes:
-        # Create separate neural networks for player and enemy
-        player_net = neat.nn.FeedForwardNetwork.create(genome, config_tarnished)
+        def handle_termination(signum, frame):
+            global terminate_flag
+            terminate_flag = True
+            print("Termination signal received. Cleaning up...")
+
+        # Register signal handlers
+        signal.signal(signal.SIGINT, handle_termination)
+        signal.signal(signal.SIGTERM, handle_termination)
+
+        @contextmanager
+        def terminating_executor(max_workers):
+            with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+                try:
+                    yield executor
+                finally:
+                    if terminate_flag:
+                        executor.shutdown(wait=True)
+                        print("Executor shut down gracefully.")
+                        sys.exit(0)
         
-        # Run the simulation
-        player_fitness = play_game(player_net)
+        # We need to execute the training in parallel
+        # Create a process pool for parallel execution
+        futures = {}
+        with terminating_executor(max_workers=MAX_WORKERS) as executor:
+            for (genome_id, genome) in genomes:
+                pop_num += 1
+                net = neat.nn.FeedForwardNetwork.create(genome, config)
+                # Schedule the game simulation to run in parallel
+                # We need to give it the pop_num, as parallel is gonna mess with it a lot
+                future = executor.submit(play_game, net, int(pop_num), gen, ep)
+                futures[future] = genome_id
+                
+            print("We made all the futures, now handle getting the results.")
+            # Collect results as they complete
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    fit = future.result()
+                    genome_id = futures[future]
+                    results[genome_id] = fit
+                except Exception as e:
+                    logger.exception(f"Exception getting result for genome {genome_id}: {e}")
+                    raise
+                
+                # It is inconceivable with the number of fitness modifications that tarnished has a fitness 0...
+                # While it could be possible for us to reach 0 at some point, its extremely unlikely, as its only really
+                # feasible at the start if the network continuously outputs one input. However, this is solved with us 
+                # using epsilon training, as it gives us time in the beginning while it trains to avoid situations like 
+                # this. So only raise an error if the epsilon training is active and it still hit 0, as that means we 
+                # failed to assign it somehow.
+                # IMPORTANT: This may change when we switch to Deep Q-Learning, as I do not know how that works, but we likely
+                # wont be using epsilon training when we implement that.
+                assert genome.fitness or ENABLE_EPSILON, "We failed to retrieve/assign the fitness, or we need to buy a lottery ticket"
+
+    pop_num = 0
+    for (genome_id, genome) in genomes:
+        if results is not None:
+            # We already did parallel execution, log results
+            fitness = results[genome_id]
+        else:
+            # Create separate neural networks for player and enemy
+            # NOTE: Not sure why its claiming that this code isn't reachable.
+            # results is None if we do not execute parallel.
+            logger.debug("We are executing this manually")
+            player_net = neat.nn.FeedForwardNetwork.create(genome, config)
+            
+            # Run the simulation
+            pop_num += 1
+            fitness = play_game(player_net, pop_num, gen, ep)
         
         # Assign fitness to each genome
-        genome.fitness = player_fitness
+        genome.fitness = fitness
 
-        assert genome.fitness is not None
+        # It is inconceivable with the number of fitness modifications that tarnished has a fitness 0...
+        # See parallel for more info
+        assert genome.fitness or ENABLE_EPSILON, "We failed to retrieve/assign the fitness, or we need to buy a lottery ticket"
 
     # See if we need to clean up our gamestates
     # We should only need to prune the same interval that we batch delete, since they should
     # All roughly be the same size.
     # Actually, we are going to do it one less, because we want to be able to catch up in case the
     # games are going longer due to fitter populations learning to survive.
-    if (curr_gen % (BATCH_REMOVE_GENS - 1)) == 0:
+    if (gen % (BATCH_REMOVE_GENS - 1)) == 0:
         prune_gamestates()
 
 
 ### Core processing functions ###
 def main():
-    global curr_gen
-
     pop, start_gen_num = get_pop_and_gen(args)
-    curr_gen = start_gen_num
+    get_gen.current = start_gen_num
 
     try:
-        winner = pop.run(lambda genomes, config: eval_genomes(genomes, config), n=GENERATIONS - start_gen_num)
-    except Exception as e:
+        winner = pop.run(eval_genomes, n=GENERATIONS - start_gen_num)
+    except Exception:
         with open("debug.txt", "w") as f:
-            f.write(str(e))
+            f.write(traceback.format_exc())
         raise
     pass
 
@@ -442,6 +501,70 @@ def process_statistics():
 #             replay_best_in_gen(gen, trainer, args.best or DEFAULT_NUM_BEST_GENS)
 
 ### End - Core processing functions ###
+
+NETWORK_OUTPUT_MAP = [
+    Action.UP,
+    Action.RIGHT,
+    Action.DOWN,
+    Action.LEFT,
+]
+
+def get_net_action(net, inputs) -> Action:
+    # Now get the recommended outputs
+    outputs = net.activate(inputs)
+    for i in range(len(outputs)):
+        if outputs[i]:
+            return NETWORK_OUTPUT_MAP[i]
+    return None
+
+last_action = None
+
+def get_action(inputs) -> Action:
+    """Determine action to do
+
+    Args:
+        inputs (_type_): keys being pressed
+    """
+    global last_action
+
+    action = None
+    if inputs[pygame.K_w]: # W
+        action = Action.UP
+    elif inputs[pygame.K_s]: # S
+        action = Action.DOWN
+    elif inputs[pygame.K_a]: # A
+        action = Action.LEFT
+    elif inputs[pygame.K_d]: # D
+        action = Action.RIGHT
+    
+    if action:
+        print(f"This is our action {action}")
+    # This makes it so that you can't just hold down a key and it will continue to spam the inputs
+    # Only useful for user interactions, as the network will be able to keep up. Shocked it runs so fast tho
+    if action and action != last_action:
+        # These are different, and we found an action, so we can actually use it
+        last_action = action
+        return action
+
+    last_action = action
+    return None
+
+
+def draw_text(surface, text, x, y, font_size=20, color=(255, 255, 255)):
+    font = pygame.font.SysFont(None, font_size)
+    text_surface = font.render(text, True, color)
+    surface.blit(text_surface, (x, y))
+
+def draw(board: Board, pop):
+    # Fill background
+    screen.fill(BACKGROUND_COLOR)
+
+    board.draw(screen)
+
+    draw_text(screen, "Generation: " + str(get_gen.current), 100, 650, font_size=40, color=(255, 0, 0))
+    draw_text(screen, "Population: " + str(pop), 400, 650, font_size=40, color=(255, 0, 0))
+    pygame.display.update()
+
 
 ### Statistics ###
 def display_stats_from_gen(gen_num):
@@ -681,6 +804,33 @@ def display_stats_from_gen(gen_num):
 
 ### End - Replays ###
 
+def epsilon(gen = None):
+    """Current epsilon value. Only sets if given a generation, to avoid repeated calculations
+
+    Args:
+        gen (_type_, optional): _description_. Defaults to None.
+
+    Returns:
+        _type_: _description_
+    """
+    if not hasattr(epsilon, "current"):
+        epsilon.current = 0  # it doesn't exist yet, so initialize it
+    if gen:
+        epsilon.current = max(EPSILON_END, EPSILON_START * (EPSILON_DECAY ** gen))
+    return epsilon.current
+
+def get_gen() -> int:
+    """Really strange way of maintaining a global state for the current generation.
+    Set using get_gen.current = X. Anytime retrieving will increment generation, so
+    likely will need to use offset to get the right value.
+    See this for details: https://stackoverflow.com/a/279597
+    Returns:
+        int: Current generation
+    """
+    if not hasattr(get_gen, "current"):
+        get_gen.current = 0  # it doesn't exist yet, so initialize it
+    get_gen.current += 1
+    return get_gen.current
 
 if __name__ == "__main__":
     if args.stats:
@@ -693,4 +843,3 @@ if __name__ == "__main__":
 
 
 pygame.quit()
-sys.exit()
