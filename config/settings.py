@@ -64,6 +64,7 @@ TILE_GAP = 10
 
 
 class DQNSettings:
+    EPISODES = 50
     MAX_TURNS = 1000
     PENALTY_FOR_NOOP = -25
 

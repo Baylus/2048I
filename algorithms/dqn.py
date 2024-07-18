@@ -19,7 +19,7 @@ import random
 import tensorflow as tf
 
 from action import Action
-from config.settings import DQNSettings as dqs
+from config.settings import DQNSettings as dqns
 from game import Board, GameDone, NoOpAction
 from utilities.singleton import Singleton
 
@@ -71,50 +71,49 @@ class DQNTrainer():
 
         # Hyperparameters
         self.gamma = 0.99
-        self.epsilon = dqs.EPSILON_START
-        self.epsilon_min = dqs.EPSILON_MIN
-        self.epsilon_decay = dqs.EPSILON_DECAY
-        self.batch_size = dqs.REPLAY_BATCH_SIZE
+        self.epsilon = dqns.EPSILON_START
+        self.epsilon_min = dqns.EPSILON_MIN
+        self.epsilon_decay = dqns.EPSILON_DECAY
+        self.batch_size = dqns.REPLAY_BATCH_SIZE
         self.replay_buffer = ReplayMemory(2000)
 
         self.board = Board()
 
     def reset(self):
-        self.epsilon = dqs.EPSILON_START
         # Make sure board is fresh
         self.board = Board()
-        self.state = (16,)
 
-    def train(self, max_time: int):
-        # Reset the trainer
-        self.reset()
-        # TODO: Enable viewing somehow when display is not disabled.
-        
-        for _ in range(dqs.MAX_TURNS):  # Arbitrary max time steps per episode
-            action = self._choose_action()
-            next_state, reward, done = self._take_action(action)  # Execute action
-            next_state = np.reshape(next_state, (4, 4)) # TODO: Confirm that this is correct/needed
-            self.replay_buffer.store((self.state, action, reward, next_state, done))
-            self.state = next_state
+    def train(self, max_time: int = dqns.MAX_TURNS, episodes: int = 1):
+        for _ in range(episodes):
+            # Reset the trainer
+            self.reset()
+            # TODO: Enable viewing somehow when display is not disabled.
             
-            if done:
-                self.target_model.set_weights(self.model.get_weights())
-                break
-            
-            if len(self.replay_buffer) > self.batch_size:
-                minibatch = random.sample(self.replay_buffer, self.batch_size)
-                # state, action, reward, new state, done?
-                for s, a, r, ns, d in minibatch:
-                    target = r
-                    if not d:
-                        target = r + self.gamma * np.amax(self.target_model.predict(ns)[0])
-                    target_f = self.model.predict(s)
-                    target_f[0][a] = target
-                    self.model.fit(s, target_f, epochs=1, verbose=0)
+            for _ in range(max_time):  # Arbitrary max time steps per episode
+                action = self._choose_action()
+                curr_state = self.board.get_state()
+                next_state, reward, done = self._take_action(action)  # Execute action
+                next_state = np.reshape(next_state, (4, 4)) # TODO: Confirm that this is correct/needed
+                self.replay_buffer.store((curr_state, action, reward, next_state, done))
                 
-                if self.epsilon > self.epsilon_min:
-                    self.epsilon *= self.epsilon_decay
-        pass
+                if done:
+                    self.target_model.set_weights(self.model.get_weights())
+                    break
+                
+                if len(self.replay_buffer) > self.batch_size:
+                    minibatch = random.sample(self.replay_buffer, self.batch_size)
+                    # state, action, reward, new state, done?
+                    for s, a, r, ns, d in minibatch:
+                        target = r
+                        if not d:
+                            target = r + self.gamma * np.amax(self.target_model.predict(ns)[0])
+                        target_f = self.model.predict(s)
+                        target_f[0][a] = target
+                        self.model.fit(s, target_f, epochs=1, verbose=0)
+                    
+                    if self.epsilon > self.epsilon_min:
+                        self.epsilon *= self.epsilon_decay
+        # End .train()
 
     def _take_action(self, action: Action) -> tuple[list[int], int, bool]:
         """Executes action on current board, and retrieves the values relevant for that action.
@@ -133,14 +132,20 @@ class DQNTrainer():
         tmp = self.board.score # In case our game ends, we need to find out the score that we earned in move anyway
         try:
             reward = self.board.act(action)
-            
         except GameDone:
             # Our game finished from our action
             done = True
             reward = self.board - tmp
         except NoOpAction:
             # Our action did not do anything. We need to punish the model for this.
-            reward = dqs.PENALTY_FOR_NOOP
+            # NOTE: As opposed to NEAT, or other genetic learning algorithms, we
+            #       actually do want to punish the reward, even when it is a random 
+            #       move from the epsilon-greedy strategy, because we are training 
+            #       the Q-values based on the moves chosen, so if we did not punish 
+            #       it here, it would affect how the model interprets this action, 
+            #       and it might get the values confused as opposed to when it 
+            #       chooses an action that is not valid.
+            reward = dqns.PENALTY_FOR_NOOP
         
         # We are always going to update the state anyway
         new_state = self.board.get_state()

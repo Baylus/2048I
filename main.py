@@ -25,6 +25,7 @@ from action import Action, get_state_action
 from game import Board, GameDone, NoOpAction
 from fitness import get_fitness
 
+from algorithms.dqn import DQNTrainer
 from config.settings import *
 from files.manage_files import prune_gamestates, get_pop_and_gen
 
@@ -381,12 +382,18 @@ def eval_genomes(genomes, config):
 
 ### Core processing functions ###
 def main():
-    # TODO: Hook up DQN somewhere here.
-    pop, start_gen_num = get_pop_and_gen(args)
-    get_gen.current = start_gen_num
-
     try:
-        winner = pop.run(eval_genomes, n=GENERATIONS - start_gen_num)
+        if args.dqn:
+            # TODO: Add checkpointing
+            trainer = DQNTrainer()
+            for _ in range(DQNSettings.EPISODES):
+                trainer.train()
+            pass
+        else:
+            pop, start_gen_num = get_pop_and_gen(args)
+            get_gen.current = start_gen_num
+
+            _ = pop.run(eval_genomes, n=GENERATIONS - start_gen_num)
     except OSError as e:
         # This is likely because we ran out of memory.
         
