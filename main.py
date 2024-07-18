@@ -66,9 +66,9 @@ parser.add_argument("-dc", "--dont_clean", dest="clean", action="store_false", d
                     help="Should we avoid cleaning up our previous gamestates?")
 parser.add_argument("-l", "--parallel", dest="parallel", action="store_true", default=False,
                     help="Should we run parallel instances of the game simulation?")
-parser.add_argument("-d", "--hide", dest="hide", action="store_true", default=False,
+parser.add_argument("-i", "--hide", dest="hide", action="store_true", default=False,
                     help="Should we hide the game by not drawing the entities?")
-parser.add_argument("-q", "--dqn", dest="dqn", action="store_true", default=False,
+parser.add_argument("-d", "--dqn", dest="dqn", action="store_true", default=False,
                     help="Should we train using DQN? Will take precedence over NEAT training.")
 
 args = parser.parse_args()
@@ -383,10 +383,11 @@ def eval_genomes(genomes, config):
 ### Core processing functions ###
 def main():
     try:
-        if args.dqn:
+        if True:
             # TODO: Add checkpointing
             trainer = DQNTrainer()
-            for _ in range(DQNSettings.EPISODES):
+            for i in range(DQNSettings.EPISODES):
+                print(f"On training episode {i}")
                 trainer.train()
             pass
         else:
@@ -568,6 +569,8 @@ def draw_text(surface, text, x, y, font_size=20, color=(255, 255, 255)):
 
 def draw(board: Board, pop):
     # Fill background
+    if not screen:
+        return
     screen.fill(BACKGROUND_COLOR)
 
     board.draw(screen)

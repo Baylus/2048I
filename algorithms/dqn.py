@@ -23,14 +23,14 @@ from config.settings import DQNSettings as dqns
 from game import Board, GameDone, NoOpAction
 from utilities.singleton import Singleton
 
-class MemoryBuffer():
+class MemoryBuffer(deque):
     def __init__(self, len=2000):
-        self.buffer = deque(maxlen=len)
+        super().__init__(maxlen=len)
 
     def store(self, memory):
-        self.buffer.append(memory)
+        self.append(memory)
 
-class SharedMemory(MemoryBuffer, meta_class=Singleton):
+class SharedMemory(MemoryBuffer, metaclass=Singleton):
     """ 
         Shared replay memory for when we need to have parallel processes where 
         we will access both local and shared memory buffers.
@@ -157,40 +157,3 @@ class DQNTrainer():
             return random.choice(list(Action))
         q_values = self.model.predict(self.board.get_state())
         return np.argmax(q_values[0])
-
-
-
-# Training loop (simplified)
-def train_dqn(episodes):
-
-    for e in range(episodes):
-        state = reset_game()  # Reset game to initial state
-        state = np.reshape(state, [1, state_size[0]])
-        
-        for time in range(500):  # Arbitrary max time steps per episode
-            action = choose_action(state, epsilon)
-            next_state, reward, done = step_game(action)  # Execute action
-            next_state = np.reshape(next_state, [1, state_size[0]])
-            replay_buffer.append((state, action, reward, next_state, done))
-            state = next_state
-
-            if done:
-                target_model.set_weights(model.get_weights())
-                break
-            
-            if len(replay_buffer) > batch_size:
-                minibatch = random.sample(replay_buffer, batch_size)
-                # state, action, reward, new state, done?
-                for s, a, r, ns, d in minibatch:
-                    target = r
-                    if not d:
-                        target = r + gamma * np.amax(target_model.predict(ns)[0])
-                    target_f = model.predict(s)
-                    target_f[0][a] = target
-                    model.fit(s, target_f, epochs=1, verbose=0)
-                
-                if epsilon > epsilon_min:
-                    epsilon *= epsilon_decay
-
-# Start training
-train_dqn(1000)
