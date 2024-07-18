@@ -63,6 +63,21 @@ BOARD_HEIGHT = 600
 TILE_GAP = 10
 
 
+class DQNSettings:
+    MAX_TURNS = 1000
+    PENALTY_FOR_NOOP = -25
+
+    ENABLE_EPSILON = True
+    EPSILON_START = 0.8  # Initial exploration rate
+    EPSILON_MIN = 0.0    # Final exploration rate
+    # Started at 0.995
+    EPSILON_DECAY = 0.97  # Decay rate per generation
+
+    REPLAY_BATCH_SIZE = 64
+
+    # Within the CHECK
+    CHECKPOINTS_PATH = CHECKPOINTS_PATH + "dqn/"
+
 BACKGROUND_COLOR = (187, 173, 160)
 BOARD_COLOR = (187, 173, 160)
 # Grabbed these from some github, so hopefully they are sortof accurate

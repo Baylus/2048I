@@ -21,7 +21,7 @@ import traceback
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame
 
-from action import Action
+from action import Action, get_state_action
 from game import Board, GameDone, NoOpAction
 from fitness import get_fitness
 
@@ -67,6 +67,8 @@ parser.add_argument("-l", "--parallel", dest="parallel", action="store_true", de
                     help="Should we run parallel instances of the game simulation?")
 parser.add_argument("-d", "--hide", dest="hide", action="store_true", default=False,
                     help="Should we hide the game by not drawing the entities?")
+parser.add_argument("-q", "--dqn", dest="dqn", action="store_true", default=False,
+                    help="Should we train using DQN? Will take precedence over NEAT training.")
 
 args = parser.parse_args()
 
@@ -101,8 +103,9 @@ if args.stats:
 # DELETE GAME STATES #
 # Only delete if we arent replaying, checking stats, and havent specified to not clean
 # if not replays and args.clean and not SAVE_GAMESTATES:
-def clean_gamestates():
-    if args.clean and not args.stats and args.reset and not SAVE_GAMESTATES:
+def clean_gamestates(override = False):
+    # Override enables forcing deletion of all things. Used in case things get really out of hand during automated training
+    if override or (args.clean and not args.stats and args.reset and not SAVE_GAMESTATES):
         print("Cleaning game states")
         folder = GAMESTATES_PATH
         for filename in os.listdir(folder):
@@ -378,11 +381,21 @@ def eval_genomes(genomes, config):
 
 ### Core processing functions ###
 def main():
+    # TODO: Hook up DQN somewhere here.
     pop, start_gen_num = get_pop_and_gen(args)
     get_gen.current = start_gen_num
 
     try:
         winner = pop.run(eval_genomes, n=GENERATIONS - start_gen_num)
+    except OSError as e:
+        # This is likely because we ran out of memory.
+        
+        # # This would be ideal, but it would need testing to make sure it works, or it could cause serious issues since it will be left unattended, and I might not have time to test it before leaving, and I want to start a run before going.
+        # import errno
+        # if e.errno == errno.ENOSPC:
+        #     # We did run out of memory.
+        #     clean_gamestates(override=True)
+        clean_gamestates(override=True)
     except Exception:
         with open("debug.txt", "w") as f:
             f.write(traceback.format_exc())
@@ -502,20 +515,11 @@ def process_statistics():
 
 ### End - Core processing functions ###
 
-NETWORK_OUTPUT_MAP = [
-    Action.UP,
-    Action.RIGHT,
-    Action.DOWN,
-    Action.LEFT,
-]
 
 def get_net_action(net, inputs) -> Action:
     # Now get the recommended outputs
     outputs = net.activate(inputs)
-    for i in range(len(outputs)):
-        if outputs[i]:
-            return NETWORK_OUTPUT_MAP[i]
-    return None
+    return get_state_action(outputs)
 
 last_action = None
 
