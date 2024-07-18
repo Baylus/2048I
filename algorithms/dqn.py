@@ -24,6 +24,7 @@ from action import Action, NETWORK_OUTPUT_MAP
 from config.settings import DQNSettings as dqns
 from game import Board, GameDone, NoOpAction
 from utilities.singleton import Singleton
+from utilities.gamestates import DQNStates
 
 class MemoryBuffer(deque):
     def __init__(self, len=2000):
@@ -96,39 +97,44 @@ class DQNTrainer():
         self.board = Board()
 
     def train(self, max_time: int = dqns.MAX_TURNS, episodes: int = 1):
-        for _ in range(episodes):
-            # Reset the trainer
-            self.reset()
-            # TODO: Enable viewing somehow when display is not disabled.
-            
-            for i in range(max_time):  # Arbitrary max time steps per episode
-                print(f"Taking step {i}")
-                action = self._choose_action()
-                # print(f"Our action results are type {type(action)}, and heres its value {action}")
-                curr_state = self.board.grid
-                next_state, reward, done = self._take_action(action)  # Execute action
-                next_state = np.reshape(next_state, (4, 4)) # TODO: Confirm that this is correct/needed
-                self.replay_buffer.store((curr_state, action, reward, next_state, done))
-                
-                if done:
-                    self.target_model.set_weights(self.model.get_weights())
-                    break
-                
-                if len(self.replay_buffer) > self.batch_size:
-                    print("Doing replay training now")
-                    minibatch = random.sample(self.replay_buffer, self.batch_size)
-                    # state, action, reward, new state, done?
-                    for s, a, r, ns, d in minibatch:
-                        target = r
-                        if not d:
-                            target = r + self.gamma * np.amax(self.target_model.predict(ns)[0])
-                        target_f = self.model.predict(s)
-                        # a - 1: Because our action value begins at 1, we need to map it back to arrays
-                        target_f[0][a - 1] = target
-                        self.model.fit(s, target_f, epochs=1, verbose=0, callbacks=self.callbacks)
+        for i in range(episodes):
+            try:
+                # Reset the trainer
+                self.reset()
+                game_states = DQNStates(i)
+                # TODO: Enable viewing somehow when display is not disabled.
+                for i in range(max_time):  # Arbitrary max time steps per episode
+                    game_states.store(self.board)
+                    print(f"Taking step {i}")
+                    action = self._choose_action()
+                    # print(f"Our action results are type {type(action)}, and heres its value {action}")
+                    curr_state = self.board.grid
+                    next_state, reward, done = self._take_action(action)  # Execute action
+                    next_state = np.reshape(next_state, (4, 4)) # TODO: Confirm that this is correct/needed
+                    self.replay_buffer.store((curr_state, action, reward, next_state, done))
                     
-                    if self.epsilon > self.epsilon_min:
-                        self.epsilon *= self.epsilon_decay
+                    if done:
+                        self.target_model.set_weights(self.model.get_weights())
+                        break
+                    
+                    if len(self.replay_buffer) > self.batch_size:
+                        print("Doing replay training now")
+                        minibatch = random.sample(self.replay_buffer, self.batch_size)
+                        # state, action, reward, new state, done?
+                        for s, a, r, ns, d in minibatch:
+                            target = r
+                            if not d:
+                                target = r + self.gamma * np.amax(self.target_model.predict(ns)[0])
+                            target_f = self.model.predict(s)
+                            # a - 1: Because our action value begins at 1, we need to map it back to arrays
+                            target_f[0][a - 1] = target
+                            self.model.fit(s, target_f, epochs=1, verbose=0, callbacks=self.callbacks)
+                        
+                        if self.epsilon > self.epsilon_min:
+                            self.epsilon *= self.epsilon_decay
+
+            finally:
+                game_states.log_game()
         # End .train()
 
     def _take_action(self, action: Action) -> tuple[list[int], int, bool]:

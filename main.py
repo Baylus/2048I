@@ -200,7 +200,7 @@ def play_game(net, pop, gen, ep) -> int:
         game_result = {
             "fitness": 0,
             "score": 0,
-            "result_notes": "",
+            "notes": "",
             "game_states": [],
         }
         logger.debug("About to run game")
@@ -249,7 +249,7 @@ def play_game(net, pop, gen, ep) -> int:
             if updates > MAX_UPDATES_PER_GAME:
                 # game_result["notes"] = "Game stalemated"
                 logger.debug("Something went really wrong here, the network wasnt outputting somehow.")
-                game_result["result_notes"] = "We ran out of time"
+                game_result["notes"] = "We ran out of time"
                 running = False
     except GameDone:
         # Expected state
@@ -262,7 +262,7 @@ def play_game(net, pop, gen, ep) -> int:
         raise
     finally:
         game_result["score"] = board.score
-        fit = get_fitness(board, game_result)
+        fit = get_fitness(board.score, game_result["game_states"])
         game_result["fitness"] = fit
         file_name = f"{str(fit)}_{str(pop)}"
         file_name += ".json"
@@ -382,6 +382,7 @@ def eval_genomes(genomes, config):
 
 ### Core processing functions ###
 def main():
+    pathlib.Path(f"{GAMESTATES_PATH}").mkdir(parents=True, exist_ok=True)
     try:
         if True:
             # TODO: Add checkpointing
