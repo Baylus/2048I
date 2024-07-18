@@ -141,7 +141,7 @@ class DQNTrainer():
         except GameDone:
             # Our game finished from our action
             done = True
-            reward = self.board - tmp
+            reward = self.board.score - tmp
         except NoOpAction:
             # Our action did not do anything. We need to punish the model for this.
             # NOTE: As opposed to NEAT, or other genetic learning algorithms, we
