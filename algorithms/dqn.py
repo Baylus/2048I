@@ -50,6 +50,9 @@ class DQNTrainer():
         self.model = None
         self.target_model = None
         self.board = Board()
+        
+        # Training models
+        self.callbacks = [] # i.e. checkpointers
         if checkpoint_file:
             # TODO: Implement checkpoint resuming
             raise NotImplementedError
@@ -71,6 +74,13 @@ class DQNTrainer():
             self.model = build_model(state_size, action_size)
             self.target_model = build_model(state_size, action_size)
             self.target_model.set_weights(self.model.get_weights())
+            filename = "checkpoint" + ".weights.h5"
+            self.callbacks.append(
+                keras.callbacks.ModelCheckpoint(
+                    filepath=dqns.CHECKPOINTS_PATH + filename, 
+                    save_weights_only=True
+                )        
+            )
 
         # Hyperparameters
         self.gamma = 0.99
@@ -115,7 +125,7 @@ class DQNTrainer():
                         target_f = self.model.predict(s)
                         # a - 1: Because our action value begins at 1, we need to map it back to arrays
                         target_f[0][a - 1] = target
-                        self.model.fit(s, target_f, epochs=1, verbose=0)
+                        self.model.fit(s, target_f, epochs=1, verbose=0, callbacks=self.callbacks)
                     
                     if self.epsilon > self.epsilon_min:
                         self.epsilon *= self.epsilon_decay
