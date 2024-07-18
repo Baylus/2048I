@@ -13,12 +13,14 @@ the Learner and Actor should be singular instances
 
 """
 from collections import deque
-import keras
 import numpy as np
+import os
 import random
-import tensorflow as tf
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+# import keras with tensorflow's warning message disabled
+import keras
 
-from action import Action
+from action import Action, NETWORK_OUTPUT_MAP
 from config.settings import DQNSettings as dqns
 from game import Board, GameDone, NoOpAction
 from utilities.singleton import Singleton
@@ -47,6 +49,7 @@ class DQNTrainer():
     def __init__(self, checkpoint_file = ""):
         self.model = None
         self.target_model = None
+        self.board = Board()
         if checkpoint_file:
             # TODO: Implement checkpoint resuming
             raise NotImplementedError
@@ -63,7 +66,7 @@ class DQNTrainer():
                 return model
 
             # Initialize parameters
-            state_size = (16,)  # 4x4 grid flattened
+            state_size = (4,)  # 4x4 grid flattened
             action_size = 4  # up, down, left, right
             self.model = build_model(state_size, action_size)
             self.target_model = build_model(state_size, action_size)
@@ -77,7 +80,6 @@ class DQNTrainer():
         self.batch_size = dqns.REPLAY_BATCH_SIZE
         self.replay_buffer = ReplayMemory(2000)
 
-        self.board = Board()
 
     def reset(self):
         # Make sure board is fresh
@@ -89,9 +91,11 @@ class DQNTrainer():
             self.reset()
             # TODO: Enable viewing somehow when display is not disabled.
             
-            for _ in range(max_time):  # Arbitrary max time steps per episode
+            for i in range(max_time):  # Arbitrary max time steps per episode
+                print(f"Taking step {i}")
                 action = self._choose_action()
-                curr_state = self.board.get_state()
+                # print(f"Our action results are type {type(action)}, and heres its value {action}")
+                curr_state = self.board.grid
                 next_state, reward, done = self._take_action(action)  # Execute action
                 next_state = np.reshape(next_state, (4, 4)) # TODO: Confirm that this is correct/needed
                 self.replay_buffer.store((curr_state, action, reward, next_state, done))
@@ -101,6 +105,7 @@ class DQNTrainer():
                     break
                 
                 if len(self.replay_buffer) > self.batch_size:
+                    print("Doing replay training now")
                     minibatch = random.sample(self.replay_buffer, self.batch_size)
                     # state, action, reward, new state, done?
                     for s, a, r, ns, d in minibatch:
@@ -108,7 +113,8 @@ class DQNTrainer():
                         if not d:
                             target = r + self.gamma * np.amax(self.target_model.predict(ns)[0])
                         target_f = self.model.predict(s)
-                        target_f[0][a] = target
+                        # a - 1: Because our action value begins at 1, we need to map it back to arrays
+                        target_f[0][a - 1] = target
                         self.model.fit(s, target_f, epochs=1, verbose=0)
                     
                     if self.epsilon > self.epsilon_min:
@@ -152,8 +158,10 @@ class DQNTrainer():
         return (new_state, reward, done)
 
     # Function to choose action based on epsilon-greedy policy
-    def _choose_action(self):
+    def _choose_action(self) -> Action:
         if np.random.rand() <= self.epsilon:
+            print("random choice")
             return random.choice(list(Action))
-        q_values = self.model.predict(self.board.get_state())
-        return np.argmax(q_values[0])
+        # print(f"Our current grid {self.board.grid}\n")
+        q_values = self.model.predict(self.board.grid)
+        return NETWORK_OUTPUT_MAP[np.argmax(q_values[0])]
