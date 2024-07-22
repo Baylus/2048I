@@ -387,10 +387,7 @@ def main():
         if True:
             # TODO: Add checkpointing
             trainer = DQNTrainer()
-            for i in range(DQNSettings.EPISODES):
-                print(f"On training episode {i}")
-                trainer.train()
-            pass
+            trainer.train(DQNSettings.EPISODES)
         else:
             pop, start_gen_num = get_pop_and_gen(args)
             get_gen.current = start_gen_num

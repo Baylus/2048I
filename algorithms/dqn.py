@@ -101,7 +101,7 @@ class DQNTrainer():
             try:
                 # Reset the trainer
                 self.reset()
-                game_states = DQNStates(i)
+                game_states = DQNStates(i + 1)
                 # TODO: Enable viewing somehow when display is not disabled.
                 for i in range(max_time):  # Arbitrary max time steps per episode
                     game_states.store(self.board)
