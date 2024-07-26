@@ -71,12 +71,12 @@ class DQNSettings:
 
     # Learning stuff
     LAERNING_RATE = 0.001
-    
+
     ENABLE_EPSILON = True
-    EPSILON_START = 0.3  # Initial exploration rate
-    EPSILON_MIN = 0.0    # Final exploration rate
+    EPSILON_START = 0.9  # Initial exploration rate
+    EPSILON_MIN = 0.01    # Final exploration rate
     # Started at 0.995
-    EPSILON_DECAY = 0.8  # Decay rate per generation
+    EPSILON_DECAY = 0.99  # Decay rate per generation
 
     REPLAY_BATCH_SIZE = 64
 

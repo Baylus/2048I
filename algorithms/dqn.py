@@ -77,7 +77,7 @@ class DQNTrainer():
             else:
                 print("We don't have our specified weights")
                 # TODO: Consider looking for other weight files within the directory.
-        
+
         self.target_model = build_model(state_size, action_size)
         self.target_model.set_weights(self.model.get_weights())
         filename = "best.weights.h5"
@@ -103,15 +103,14 @@ class DQNTrainer():
         self.board = Board()
 
     def train(self, episodes: int = 1, max_time: int = dqns.MAX_TURNS):
-        for i in range(episodes):
+        for episode in range(episodes):
             try:
                 # Reset the trainer
                 self.reset()
-                game_states = DQNStates(i + 1)
+                game_states = DQNStates(episode + 1)
                 # TODO: Enable viewing somehow when display is not disabled.
                 for i in range(max_time):  # Arbitrary max time steps per episode
                     game_states.store(self.board)
-                    print(f"Taking step {i}")
                     action = self._choose_action()
                     # print(f"Our action results are type {type(action)}, and heres its value {action}")
                     curr_state = self.board.grid
@@ -131,7 +130,7 @@ class DQNTrainer():
                             target = r
                             if not d:
                                 target = r + self.gamma * np.amax(self.target_model.predict(ns)[0])
-                            target_f = self.model.predict(s)
+                            target_f = self.model.predict(s, verbose=0)
                             # a - 1: Because our action value begins at 1, we need to map it back to arrays
                             target_f[0][a - 1] = target
                             self.model.fit(s, target_f, epochs=1, verbose=0, callbacks=self.callbacks)
@@ -144,14 +143,14 @@ class DQNTrainer():
             finally:
                 game_states.log_game()
                 # House keeping
-                if i % dqns.CHECKPOINT_INTERVAL == 0:
-                    self.save_weights(i)
+                if episode % dqns.CHECKPOINT_INTERVAL == 0:
+                    self.save_weights(episode)
                 # See if we need to clean up our gamestates
                 # We should only need to prune the same interval that we batch delete, since they should
                 # All roughly be the same size.
                 # Actually, we are going to do it one less, because we want to be able to catch up in case the
                 # games are going longer due to fitter populations learning to survive.
-                if (i % (BATCH_REMOVE_GENS - 1)) == 0:
+                if (episode % (BATCH_REMOVE_GENS - 1)) == 0:
                     prune_gamestates()
         # End .train()
 
@@ -197,7 +196,6 @@ class DQNTrainer():
     # Function to choose action based on epsilon-greedy policy
     def _choose_action(self) -> Action:
         if np.random.rand() <= self.epsilon:
-            print("random choice")
             return random.choice(list(Action))
         # print(f"Our current grid {self.board.grid}\n")
         q_values = self.model.predict(self.board.grid)
