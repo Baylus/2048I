@@ -70,10 +70,10 @@ class DQNSettings:
     PENALTY_FOR_NOOP = -25
 
     ENABLE_EPSILON = True
-    EPSILON_START = 0.8  # Initial exploration rate
+    EPSILON_START = 0.3  # Initial exploration rate
     EPSILON_MIN = 0.0    # Final exploration rate
     # Started at 0.995
-    EPSILON_DECAY = 0.97  # Decay rate per generation
+    EPSILON_DECAY = 0.8  # Decay rate per generation
 
     REPLAY_BATCH_SIZE = 64
 

@@ -133,6 +133,8 @@ class DQNTrainer():
                         if self.epsilon > self.epsilon_min:
                             self.epsilon *= self.epsilon_decay
 
+                if i == max_time:
+                    game_states.add_notes("We stalled our game out too long.")
             finally:
                 game_states.log_game()
         # End .train()
