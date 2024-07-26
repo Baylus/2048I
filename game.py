@@ -70,15 +70,23 @@ class Board:
             # that we are able to check for a done board state, since it can only happen from filling the last spot
             # without the 
             raise GameDone
-            return
-
-        pass
 
 
-    def act(self, action):
-        # print(self.grid)
-        # print("########################################################################")
+    def act(self, action) -> int:
+        """Do action on the board
+
+        Args:
+            action (action.Action)
+
+        Raises:
+            NoOpAction: If the action does not change the board.
+            GameDone: If the action, along with the new tile being added, ended the game
+
+        Returns:
+            int: The change in score from the board changing.
+        """
         new_grid = None
+        old_score = self.score
         if action == Action.UP:
             new_grid = self.move_up(self.grid)
         elif action == Action.RIGHT:
@@ -95,6 +103,7 @@ class Board:
         self.grid = new_grid
         # Now we have to add a tile to replace
         self.add_tile()
+        return self.score - old_score
     
     def slide_and_merge_row_left(self, row):
         # Slide non-zero values to the left
