@@ -69,6 +69,9 @@ class DQNSettings:
     MAX_TURNS = 1000
     PENALTY_FOR_NOOP = -25
 
+    # Learning stuff
+    LAERNING_RATE = 0.001
+    
     ENABLE_EPSILON = True
     EPSILON_START = 0.3  # Initial exploration rate
     EPSILON_MIN = 0.0    # Final exploration rate
@@ -79,6 +82,7 @@ class DQNSettings:
 
     # Within the CHECK
     CHECKPOINTS_PATH = CHECKPOINTS_PATH + "dqn/"
+    CHECKPOINT_INTERVAL = 10
 
 BACKGROUND_COLOR = (187, 173, 160)
 BOARD_COLOR = (187, 173, 160)

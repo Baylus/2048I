@@ -21,7 +21,8 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import keras
 
 from action import Action, NETWORK_OUTPUT_MAP
-from config.settings import DQNSettings as dqns
+from config.settings import BATCH_REMOVE_GENS, DQNSettings as dqns
+from files.manage_files import prune_gamestates
 from game import Board, GameDone, NoOpAction
 from utilities.singleton import Singleton
 from utilities.gamestates import DQNStates
@@ -47,41 +48,42 @@ class ReplayMemory(MemoryBuffer):
 
 
 class DQNTrainer():
-    def __init__(self, checkpoint_file = ""):
+    def __init__(self, checkpoint_file = "best.weights.h5"):
         self.model = None
         self.target_model = None
         self.board = Board()
         
         # Training models
         self.callbacks = [] # i.e. checkpointers
-        if checkpoint_file:
-            # TODO: Implement checkpoint resuming
-            raise NotImplementedError
-        else:
-            # Define the neural network model
-            def build_model(input_shape, action_size):
-                model = keras.Sequential([
-                    keras.layers.Input(shape=input_shape),
-                    keras.layers.Dense(256, activation='relu'),
-                    keras.layers.Dense(256, activation='relu'),
-                    keras.layers.Dense(action_size, activation='linear')
-                ])
-                model.compile(optimizer=keras.optimizers.Adam(learning_rate=0.001), loss='mse')
-                return model
+        # Define the neural network model
+        def build_model(input_shape, action_size):
+            model = keras.Sequential([
+                keras.layers.Input(shape=input_shape),
+                keras.layers.Dense(256, activation='relu'),
+                keras.layers.Dense(256, activation='relu'),
+                keras.layers.Dense(action_size, activation='linear')
+            ])
+            model.compile(optimizer=keras.optimizers.Adam(learning_rate=dqns.LAERNING_RATE), loss='mse')
+            return model
 
-            # Initialize parameters
-            state_size = (4,)  # 4x4 grid flattened
-            action_size = 4  # up, down, left, right
-            self.model = build_model(state_size, action_size)
-            self.target_model = build_model(state_size, action_size)
-            self.target_model.set_weights(self.model.get_weights())
-            filename = "checkpoint" + ".weights.h5"
-            self.callbacks.append(
-                keras.callbacks.ModelCheckpoint(
-                    filepath=dqns.CHECKPOINTS_PATH + filename, 
-                    save_weights_only=True
-                )        
-            )
+        # Initialize parameters
+        state_size = (4,)  # 4x4 grid flattened
+        action_size = 4  # up, down, left, right
+        self.model = build_model(state_size, action_size)
+        if checkpoint_file and os.path.exists(check_path := dqns.CHECKPOINTS_PATH + checkpoint_file):
+            # Load the previous weights.
+            print("loading previous weights")
+            self.model.load_weights(check_path)
+        self.target_model = build_model(state_size, action_size)
+        self.target_model.set_weights(self.model.get_weights())
+        filename = "best.weights.h5"
+        self.callbacks.append(
+            keras.callbacks.ModelCheckpoint(
+                filepath=dqns.CHECKPOINTS_PATH + filename, 
+                save_weights_only=True,
+                save_best_only=True
+            )        
+        )
 
         # Hyperparameters
         self.gamma = 0.99
@@ -137,7 +139,20 @@ class DQNTrainer():
                     game_states.add_notes("We stalled our game out too long.")
             finally:
                 game_states.log_game()
+                # House keeping
+                if i % dqns.CHECKPOINT_INTERVAL == 0:
+                    self.save_weights(i)
+                # See if we need to clean up our gamestates
+                # We should only need to prune the same interval that we batch delete, since they should
+                # All roughly be the same size.
+                # Actually, we are going to do it one less, because we want to be able to catch up in case the
+                # games are going longer due to fitter populations learning to survive.
+                if (i % (BATCH_REMOVE_GENS - 1)) == 0:
+                    prune_gamestates()
         # End .train()
+
+    def save_weights(self, episode: int = 0):
+        self.model.save_weights(dqns.CHECKPOINTS_PATH + f"{episode}.weights.h5")
 
     def _take_action(self, action: Action) -> tuple[list[int], int, bool]:
         """Executes action on current board, and retrieves the values relevant for that action.
