@@ -70,10 +70,14 @@ class DQNTrainer():
         state_size = (4,)  # 4x4 grid flattened
         action_size = 4  # up, down, left, right
         self.model = build_model(state_size, action_size)
-        if checkpoint_file and os.path.exists(check_path := dqns.CHECKPOINTS_PATH + checkpoint_file):
-            # Load the previous weights.
-            print("loading previous weights")
-            self.model.load_weights(check_path)
+        if checkpoint_file:
+            if os.path.exists(check_path := dqns.CHECKPOINTS_PATH + checkpoint_file):
+                # Load the previous weights.
+                self.model.load_weights(check_path)
+            else:
+                print("We don't have our specified weights")
+                # TODO: Consider looking for other weight files within the directory.
+        
         self.target_model = build_model(state_size, action_size)
         self.target_model.set_weights(self.model.get_weights())
         filename = "best.weights.h5"
