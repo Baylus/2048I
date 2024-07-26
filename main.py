@@ -74,6 +74,7 @@ parser.add_argument("-d", "--dqn", dest="dqn", action="store_true", default=Fals
 args = parser.parse_args()
 
 args.parallel = PARALLEL_OVERRIDE or args.parallel
+args.dqn = DQNSettings.DQN_OVERRIDE or args.dqn
 args.hide = HIDE_OVERRIDE or args.hide or args.parallel
 
 # Check if args are valid
@@ -384,8 +385,8 @@ def eval_genomes(genomes, config):
 def main():
     pathlib.Path(f"{GAMESTATES_PATH}").mkdir(parents=True, exist_ok=True)
     try:
-        if True:
-            # TODO: Add checkpointing
+        if args.dqn:
+            # TODO: Add checkpoint resuming
             trainer = DQNTrainer()
             trainer.train(DQNSettings.EPISODES)
         else:

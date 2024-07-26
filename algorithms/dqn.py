@@ -96,7 +96,7 @@ class DQNTrainer():
         # Make sure board is fresh
         self.board = Board()
 
-    def train(self, max_time: int = dqns.MAX_TURNS, episodes: int = 1):
+    def train(self, episodes: int = 1, max_time: int = dqns.MAX_TURNS):
         for i in range(episodes):
             try:
                 # Reset the trainer
