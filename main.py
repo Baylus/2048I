@@ -387,8 +387,14 @@ def main():
     try:
         if args.dqn:
             # TODO: Add checkpoint resuming
-            trainer = DQNTrainer()
-            trainer.train(DQNSettings.EPISODES)
+            if args.parallel:
+                # We have to use ray training instead
+                from algorithms.ray_trainer import RayTrainer
+                rt = RayTrainer()
+                rt.train()
+            else:
+                trainer = DQNTrainer()
+                trainer.train(DQNSettings.EPISODES)
         else:
             pop, start_gen_num = get_pop_and_gen(args)
             get_gen.current = start_gen_num

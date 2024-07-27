@@ -84,6 +84,31 @@ class DQNSettings:
     CHECKPOINTS_PATH = CHECKPOINTS_PATH + "dqn/"
     CHECKPOINT_INTERVAL = 10
 
+class RayllibSettings:
+    EPISODES = 10
+    RAY_CONFIG = {
+        "env": "custom_2048",
+        "num_workers": 4,  # Number of parallel workers
+        "framework": "tf",
+        "gamma": 0.99,
+        "lr": DQNSettings.LEARNING_RATE,
+        "train_batch_size": DQNSettings.REPLAY_BATCH_SIZE,
+        "exploration_config": {
+            "type": "EpsilonGreedy",
+            "initial_epsilon": DQNSettings.EPSILON_START,
+            "final_epsilon": DQNSettings.EPSILON_MIN,
+            "epsilon_timesteps": int(DQNSettings.EPSILON_DECAY * 1e6),  # Number of timesteps over which to anneal epsilon
+        },
+        "model": {
+            "fcnet_hiddens": [256, 256],  # Same as your DQN model structure
+            "fcnet_activation": "relu",
+        },
+        "target_network_update_freq": 500,
+        "replay_buffer_config": {
+            "capacity": 2000, # Size of replay buffer
+        },
+    }
+
 BACKGROUND_COLOR = (187, 173, 160)
 BOARD_COLOR = (187, 173, 160)
 # Grabbed these from some github, so hopefully they are sortof accurate
