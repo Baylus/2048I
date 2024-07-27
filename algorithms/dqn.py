@@ -63,7 +63,7 @@ class DQNTrainer():
                 keras.layers.Dense(256, activation='relu'),
                 keras.layers.Dense(action_size, activation='linear')
             ])
-            model.compile(optimizer=keras.optimizers.Adam(learning_rate=dqns.LAERNING_RATE), loss='mse')
+            model.compile(optimizer=keras.optimizers.Adam(learning_rate=dqns.LEARNING_RATE), loss='mse')
             return model
 
         # Initialize parameters

@@ -70,7 +70,7 @@ class DQNSettings:
     PENALTY_FOR_NOOP = -25
 
     # Learning stuff
-    LAERNING_RATE = 0.001
+    LEARNING_RATE = 0.001
 
     ENABLE_EPSILON = True
     EPSILON_START = 0.9  # Initial exploration rate
