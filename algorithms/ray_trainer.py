@@ -25,7 +25,7 @@ class Custom2048Env(gym.Env):
     def __init__(self, config):
         super(Custom2048Env, self).__init__()
         self.board = Board()
-        self.action_space = spaces.Discrete(4)  # 4 possible actions: up, down, left, right
+        self.action_space = RayllibSettings.RAY_CONFIG["action_space"]
         self.observation_space = spaces.Box(low=0, high=1, shape=(4, 4, 1), dtype=np.float32)
 
     def reset(self):
@@ -36,13 +36,15 @@ class Custom2048Env(gym.Env):
         state = np.array(self.board.grid).reshape(4, 4, 1)
         return state
 
-    def step(self, action):
+    def step(self, action: int):
         reward = 0
         done = False
 
         tmp = self.board.score
         try:
-            reward = self.board.act(Action(action))
+            # IMPORTANT: Due to the way we are defining action space, output will be single
+            # integer, from 0-3. So we must use this mapping here.
+            reward = self.board.act(NETWORK_OUTPUT_MAP[action])
         except GameDone:
             done = True
             reward = self.board.score - tmp

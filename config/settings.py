@@ -1,4 +1,6 @@
 from enum import IntEnum, Enum
+from gym import spaces
+import numpy as np
 
 ############ NEAT STUFF
 CACHE_CHECKPOINTS = True
@@ -91,6 +93,10 @@ class RayllibSettings:
         "num_workers": 4,  # Number of parallel workers
         "framework": "tf",
         "gamma": 0.99,
+        "action_space": spaces.Discrete(4, start=1),
+        # Depending on how the high affects the training, might tune this down, since its very unlikely we are
+        # able reach this tile point, unless this has perfect training and is able to hit the best tile achievable within the game
+        "observation_space": spaces.Box(low=0, high=16384, shape=(4,), dtype=np.uint8),
         "lr": DQNSettings.LEARNING_RATE,
         "train_batch_size": DQNSettings.REPLAY_BATCH_SIZE,
         "exploration_config": {
