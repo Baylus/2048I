@@ -85,7 +85,7 @@ class DQNTrainer():
             keras.callbacks.ModelCheckpoint(
                 filepath=dqns.CHECKPOINTS_PATH + filename, 
                 save_weights_only=True,
-                save_best_only=True
+                save_freq=dqns.CHECKPOINT_INTERVAL,
             )        
         )
 
@@ -97,51 +97,18 @@ class DQNTrainer():
         self.batch_size = dqns.REPLAY_BATCH_SIZE
         self.replay_buffer = ReplayMemory(2000)
 
+        self.turn_limit = dqns.MAX_TURNS
 
     def reset(self):
         # Make sure board is fresh
         self.board = Board()
 
-    def train(self, episodes: int = 1, max_time: int = dqns.MAX_TURNS):
+    def train(self, episodes: int = 1):
         for episode in range(episodes):
+            print(f"On episode {episode + 1}")
             try:
-                # Reset the trainer
-                self.reset()
-                game_states = DQNStates(episode + 1)
-                # TODO: Enable viewing somehow when display is not disabled.
-                for i in range(max_time):  # Arbitrary max time steps per episode
-                    game_states.store(self.board)
-                    action = self._choose_action()
-                    # print(f"Our action results are type {type(action)}, and heres its value {action}")
-                    curr_state = self.board.grid
-                    next_state, reward, done = self._take_action(action)  # Execute action
-                    next_state = np.reshape(next_state, (4, 4)) # TODO: Confirm that this is correct/needed
-                    self.replay_buffer.store((curr_state, action, reward, next_state, done))
-                    
-                    if done:
-                        self.target_model.set_weights(self.model.get_weights())
-                        break
-                    
-                    if len(self.replay_buffer) > self.batch_size:
-                        print("Doing replay training now")
-                        minibatch = random.sample(self.replay_buffer, self.batch_size)
-                        # state, action, reward, new state, done?
-                        for s, a, r, ns, d in minibatch:
-                            target = r
-                            if not d:
-                                target = r + self.gamma * np.amax(self.target_model.predict(ns)[0])
-                            target_f = self.model.predict(s, verbose=0)
-                            # a - 1: Because our action value begins at 1, we need to map it back to arrays
-                            target_f[0][a - 1] = target
-                            self.model.fit(s, target_f, epochs=1, verbose=0, callbacks=self.callbacks)
-                        
-                        if self.epsilon > self.epsilon_min:
-                            self.epsilon *= self.epsilon_decay
-
-                if i == max_time:
-                    game_states.add_notes("We stalled our game out too long.")
+                self._train(episode)
             finally:
-                game_states.log_game()
                 # House keeping
                 if episode % dqns.CHECKPOINT_INTERVAL == 0:
                     self.save_weights(episode)
@@ -153,6 +120,53 @@ class DQNTrainer():
                 if (episode % (BATCH_REMOVE_GENS - 1)) == 0:
                     prune_gamestates()
         # End .train()
+
+    def _train(self, episode: int):
+        """Train one episode
+
+        Args:
+            episode (int): Episode number
+        """
+        print(f"On episode {episode + 1}")
+        try:
+            # Reset the trainer
+            self.reset()
+            game_states = DQNStates(episode + 1)
+            # TODO: Enable viewing somehow when display is not disabled.
+            for i in range(self.turn_limit):  # Arbitrary max time steps per episode
+                game_states.store(self.board)
+                action = self._choose_action()
+                # print(f"Our action results are type {type(action)}, and heres its value {action}")
+                curr_state = self.board.grid
+                next_state, reward, done = self._take_action(action)  # Execute action
+                next_state = np.reshape(next_state, (4, 4)) # TODO: Confirm that this is correct/needed
+                self.replay_buffer.store((curr_state, action, reward, next_state, done))
+                
+                if done:
+                    self.target_model.set_weights(self.model.get_weights())
+                    break
+                
+                if len(self.replay_buffer) > self.batch_size:
+                    # print("Doing replay training now")
+                    minibatch = random.sample(self.replay_buffer, self.batch_size)
+                    # state, action, reward, new state, done?
+                    for s, a, r, ns, d in minibatch:
+                        target = r
+                        if not d:
+                            target = r + self.gamma * np.amax(self.target_model.predict(ns, verbose=0)[0])
+                        target_f = self.model.predict(s, verbose=0)
+                        # a - 1: Because our action value begins at 1, we need to map it back to arrays
+                        target_f[0][a - 1] = target
+                        self.model.fit(s, target_f, epochs=1, verbose=0, callbacks=self.callbacks)
+                    
+                    if self.epsilon > self.epsilon_min:
+                        self.epsilon *= self.epsilon_decay
+
+            if i == self.turn_limit:
+                game_states.add_notes("We stalled our game out too long.")
+        finally:
+            game_states.log_game()
+        pass
 
     def save_weights(self, episode: int = 0):
         self.model.save_weights(dqns.CHECKPOINTS_PATH + f"{episode}.weights.h5")
@@ -198,5 +212,5 @@ class DQNTrainer():
         if np.random.rand() <= self.epsilon:
             return random.choice(list(Action))
         # print(f"Our current grid {self.board.grid}\n")
-        q_values = self.model.predict(self.board.grid)
+        q_values = self.model.predict(self.board.grid, verbose=0)
         return NETWORK_OUTPUT_MAP[np.argmax(q_values[0])]
