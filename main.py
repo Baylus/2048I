@@ -75,7 +75,8 @@ args = parser.parse_args()
 
 args.parallel = PARALLEL_OVERRIDE or args.parallel
 args.dqn = DQNSettings.DQN_OVERRIDE or args.dqn
-args.hide = HIDE_OVERRIDE or args.hide or args.parallel
+# TODO: Once we have added screen visualization to DQN training, dont hide screen anymore
+args.hide = HIDE_OVERRIDE or args.hide or args.parallel or args.dqn
 
 # Check if args are valid
 if args.stats:
