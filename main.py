@@ -15,6 +15,17 @@ import signal
 import sys
 import traceback
 
+# Setup import with env vars
+os.environ['CUDA_VISIBLE_DEVICES '] = '0'
+# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+import tensorflow as tf
+
+physical_devices = tf.config.experimental.list_physical_devices('GPU')
+if len(physical_devices) > 0:
+    print("We got a GPU")
+    tf.config.experimental.set_memory_growth(physical_devices[0], True)
+else:
+    print("Sorry, no GPU for you...")
 
 # Silences pygame welcome message
 # https://stackoverflow.com/a/55769463
@@ -122,8 +133,8 @@ def clean_gamestates(override = False):
                 print('Failed to delete %s. Reason: %s' % (file_path, e))
 
     # Delete debug file to ensure we arent looking at old exceptions
-    pathlib.Path.unlink("debug.txt", missing_ok=True)
-    pathlib.Path.unlink("debug.log", missing_ok=True)
+    pathlib.Path.unlink(pathlib.Path("debug.txt"), missing_ok=True)
+    pathlib.Path.unlink(pathlib.Path("debug.log"), missing_ok=True)
 
 def setup_logger():
     logger = logging.getLogger('genome_logger')
@@ -272,7 +283,7 @@ def play_game(net, pop, gen, ep) -> int:
         with open(f"{GAMESTATES_PATH}/gen_{gen}/{file_name}", 'w') as f:
             json.dump(game_result, f, cls=NpEncoder, indent=4)
     
-    logger.debug(f"Returning result {int(game_result["fitness"])}")
+    logger.debug(f"Returning result {int(game_result['fitness'])}")
     return int(game_result["fitness"])
 
 def eval_genomes(genomes, config):
