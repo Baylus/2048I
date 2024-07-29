@@ -129,7 +129,7 @@ class DQNTrainer():
                         for s, a, r, ns, d in minibatch:
                             target = r
                             if not d:
-                                target = r + self.gamma * np.amax(self.target_model.predict(ns)[0])
+                                target = r + self.gamma * np.amax(self.target_model.predict(ns, verbose=0)[0])
                             target_f = self.model.predict(s, verbose=0)
                             # a - 1: Because our action value begins at 1, we need to map it back to arrays
                             target_f[0][a - 1] = target
