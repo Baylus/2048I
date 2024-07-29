@@ -198,5 +198,5 @@ class DQNTrainer():
         if np.random.rand() <= self.epsilon:
             return random.choice(list(Action))
         # print(f"Our current grid {self.board.grid}\n")
-        q_values = self.model.predict(self.board.grid)
+        q_values = self.model.predict(self.board.grid, verbose=0)
         return NETWORK_OUTPUT_MAP[np.argmax(q_values[0])]
