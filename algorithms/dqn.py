@@ -103,11 +103,11 @@ class DQNTrainer():
         self.board = Board()
 
     def train(self, episodes: int = 1, max_time: int = dqns.MAX_TURNS):
-        for episode in range(episodes):
+        for episode in range(1, episodes + 1):
             try:
                 # Reset the trainer
                 self.reset()
-                game_states = DQNStates(episode + 1)
+                game_states = DQNStates(episode)
                 # TODO: Enable viewing somehow when display is not disabled.
                 for i in range(max_time):  # Arbitrary max time steps per episode
                     game_states.store(self.board)
