@@ -410,11 +410,11 @@ def main():
         # This is likely because we ran out of memory.
         
         # # This would be ideal, but it would need testing to make sure it works, or it could cause serious issues since it will be left unattended, and I might not have time to test it before leaving, and I want to start a run before going.
-        # import errno
-        # if e.errno == errno.ENOSPC:
-        #     # We did run out of memory.
-        #     clean_gamestates(override=True)
-        clean_gamestates(override=True)
+        import errno
+        if e.errno == errno.ENOSPC:
+            # We did run out of memory.
+            clean_gamestates(override=True)
+        # clean_gamestates(override=True)
     except Exception:
         with open("debug.txt", "w") as f:
             f.write(traceback.format_exc())
@@ -624,8 +624,8 @@ def display_stats_from_gen(gen_num):
     # Going in reverse will save a lot of overwriting, and could lead to skipping checks
     # altogether, but I am too lazy to implement that.
     for file in reversed(pop_files):
-        with open(gen_path + file) as json_file:
-            game_data = json.load(json_file)
+        file_name = gen_path + file
+        game_data = GameStates.load_game_data(file_name)
         
         fitness, pop = get_file_details(file)
         sum_fitness += fitness
@@ -654,8 +654,8 @@ def display_stats_from_gen(gen_num):
     # print(best_pops)
     for pop_file in best_pops:
         # Print populations statistics
-        with open(gen_path + pop_file) as json_file:
-            game_data = json.load(json_file)
+        file_name = gen_path + pop_file
+        game_data = GameStates.load_game_data(file_name)
         fitness, pop = get_file_details(pop_file)
         stats = "\t"
         stats += f"{pop}: "
