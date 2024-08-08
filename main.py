@@ -39,6 +39,7 @@ from fitness import get_fitness
 from algorithms.dqn import DQNTrainer
 from config.settings import *
 from files.manage_files import prune_gamestates, get_pop_and_gen
+from utilities.gamestates import GameStates
 
 parser = ArgumentParser()
 parser.add_argument("-r", "--reset", dest="reset", action="store_true", default=False,
