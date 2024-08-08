@@ -105,7 +105,7 @@ class DQNTrainer():
         self.board = Board()
 
     def train(self, episodes: int = dqns.EPISODES, max_time: int = dqns.MAX_TURNS):
-        for episode in range(1, episodes + 1):
+            print(f"Training episode {episode}")
             try:
                 # Reset the trainer
                 self.reset()
