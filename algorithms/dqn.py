@@ -81,6 +81,7 @@ class DQNTrainer():
         self.target_model = build_model(state_size, action_size)
         self.target_model.set_weights(self.model.get_weights())
         filename = "best.weights.h5"
+        # TODO: Consider saving more than just the weights
         self.callbacks.append(
             keras.callbacks.ModelCheckpoint(
                 filepath=dqns.CHECKPOINTS_PATH + filename, 
@@ -123,7 +124,7 @@ class DQNTrainer():
                         break
                     
                     if len(self.replay_buffer) > self.batch_size:
-                        print("Doing replay training now")
+                        # print("Doing replay training now")
                         minibatch = random.sample(self.replay_buffer, self.batch_size)
                         # state, action, reward, new state, done?
                         for s, a, r, ns, d in minibatch:
