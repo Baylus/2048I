@@ -28,7 +28,9 @@ from game import Board, GameDone, NoOpAction
 from utilities.singleton import Singleton
 from utilities.gamestates import DQNStates
 
-class MemoryBuffer(deque):
+class MemoryBuffer():
+    buffer: deque
+
     memory_file: shelve
     # Determine if there have been any updates since the last time we made any updates
     # to our deque in memory that we would need to save back to the file.
@@ -44,36 +46,39 @@ class MemoryBuffer(deque):
         self.memory_file = shelve.open(dqns.CHECKPOINTS_PATH + dqns.MEMORY_SUBDIR + mem_file_name)
         if "buffer" in self.memory_file and not reset:
             # We had a previous buffer stored in this memory file, and we arent trying to reset our memory.
-            self = self.memory_file["buffer"]
-            print(f"We were able to find an existing replay buffer, it has {len(self)} records!")
+            self.buffer = self.memory_file["buffer"]
         else:
             # We did not find a previous memory file. Create a new one.
             print("We did not find a previous replay buffer")
-            super().__init__(maxlen=len)
-            # self.memory_file["buffer"] = self
+            self.buffer = deque(maxlen=len)
         
         self.unsaved_changes = False
 
+    def get_samples(self, samples):
+        """Gets a specified number of samples from this replay buffer
+
+        Args:
+            samples (int): Number of samples to get
+
+        Returns:
+            list[sample]: List of samples chosen
+        """
+        return random.sample(self.buffer, samples)
+
     def store(self, memory):
-        self.append(memory)
+        self.buffer.append(memory)
         self.unsaved_changes = True
 
+    def __len__(self):
+        return len(self.buffer)
+    
     def save(self):
+        self.memory_file["buffer"] = self.buffer
         self.unsaved_changes = False
-        if self.can_store_as_object:
-            # Try to store it as an object, otherwise set state and move on
-            try:
-                self.memory_file["buffer"] = self
-                return
-            except TypeError:
-                # We are failing to pickle this object, just disable the option and move on
-                self.can_store_as_object = False
-        # Backup in case we werent able to store as object
-        self.memory_file["buffer"] = str(self)
     
     def close(self):
         if self.unsaved_changes:
-            self.memory_file.save() # Make sure we save off before closing.
+            self.save() # Make sure we save off before closing.
         self.memory_file.close()
 
 class SharedMemory(MemoryBuffer, metaclass=Singleton):
@@ -141,6 +146,7 @@ class DQNTrainer():
         self.epsilon_decay = dqns.EPSILON_DECAY
         self.batch_size = dqns.REPLAY_BATCH_SIZE
         self.replay_buffer = ReplayMemory(len=2000, reset=reset)
+        print(f"After making our replay buffer, it has {len(self.replay_buffer)} elements")
 
 
     def reset(self):
@@ -171,7 +177,7 @@ class DQNTrainer():
                         
                         if len(self.replay_buffer) > self.batch_size:
                             # print("Doing replay training now")
-                            minibatch = random.sample(self.replay_buffer, self.batch_size)
+                            minibatch = self.replay_buffer.get_samples(self.batch_size)
                             # state, action, reward, new state, done?
                             for s, a, r, ns, d in minibatch:
                                 target = r
