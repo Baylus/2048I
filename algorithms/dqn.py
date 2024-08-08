@@ -37,7 +37,7 @@ class MemoryBuffer(deque):
     unsaved_changes: bool
 
     def __init__(self, len=2000, mem_file_name = "memory.pickle", reset = False):
-        self.memory_file = shelve.open(dqns.CHECKPOINTS_PATH + mem_file_name)
+        self.memory_file = shelve.open(dqns.CHECKPOINTS_PATH + dqns.MEMORY_SUBDIR + mem_file_name)
         if "buffer" in self.memory_file and not reset:
             # We had a previous buffer stored in this memory file, and we arent trying to reset our memory.
             self = self.memory_file["buffer"]

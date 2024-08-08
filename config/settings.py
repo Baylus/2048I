@@ -82,6 +82,7 @@ class DQNSettings:
 
     # Within the CHECK
     CHECKPOINTS_PATH = CHECKPOINTS_PATH + "dqn/"
+    MEMORY_SUBDIR = "buffers/"
     CHECKPOINT_INTERVAL = 10
 
 BACKGROUND_COLOR = (187, 173, 160)
