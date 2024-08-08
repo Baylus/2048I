@@ -145,7 +145,7 @@ class DQNTrainer():
         self.epsilon_min = dqns.EPSILON_MIN
         self.epsilon_decay = dqns.EPSILON_DECAY
         self.batch_size = dqns.REPLAY_BATCH_SIZE
-        self.replay_buffer = ReplayMemory(len=2000, reset=reset)
+        self.replay_buffer = ReplayMemory(len=dqns.REPLAY_BUFFER_SIZE, reset=reset)
         print(f"After making our replay buffer, it has {len(self.replay_buffer)} elements")
 
 
