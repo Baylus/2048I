@@ -96,6 +96,7 @@ class DQNTrainer():
         self.epsilon_min = dqns.EPSILON_MIN
         self.epsilon_decay = dqns.EPSILON_DECAY
         self.batch_size = dqns.REPLAY_BATCH_SIZE
+        # TODO: Save replay memory when saving off weights
         self.replay_buffer = ReplayMemory(2000)
 
 
