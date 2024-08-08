@@ -397,8 +397,11 @@ def eval_genomes(genomes, config):
 ### Core processing functions ###
 def main():
     pathlib.Path(f"{GAMESTATES_PATH}").mkdir(parents=True, exist_ok=True)
+    pathlib.Path(f"{CHECKPOINTS_PATH}").mkdir(parents=True, exist_ok=True)
     try:
         if args.dqn:
+            dqns_dirs = DQNSettings.CHECKPOINTS_PATH + DQNSettings.MEMORY_SUBDIR
+            pathlib.Path(f"{dqns_dirs}").mkdir(parents=True, exist_ok=True)
             # TODO: Add checkpoint resuming
             trainer = DQNTrainer()
             trainer.train(DQNSettings.EPISODES)
