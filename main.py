@@ -15,6 +15,17 @@ import signal
 import sys
 import traceback
 
+# Setup import with env vars
+os.environ['CUDA_VISIBLE_DEVICES '] = '0'
+# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+import tensorflow as tf
+
+physical_devices = tf.config.experimental.list_physical_devices('GPU')
+if len(physical_devices) > 0:
+    print("We got a GPU")
+    tf.config.experimental.set_memory_growth(physical_devices[0], True)
+else:
+    print("Sorry, no GPU for you...")
 
 # Silences pygame welcome message
 # https://stackoverflow.com/a/55769463
@@ -28,6 +39,7 @@ from fitness import get_fitness
 from algorithms.dqn import DQNTrainer
 from config.settings import *
 from files.manage_files import prune_gamestates, get_pop_and_gen
+from utilities.gamestates import GameStates
 
 parser = ArgumentParser()
 parser.add_argument("-r", "--reset", dest="reset", action="store_true", default=False,
@@ -122,8 +134,8 @@ def clean_gamestates(override = False):
                 print('Failed to delete %s. Reason: %s' % (file_path, e))
 
     # Delete debug file to ensure we arent looking at old exceptions
-    pathlib.Path.unlink("debug.txt", missing_ok=True)
-    pathlib.Path.unlink("debug.log", missing_ok=True)
+    pathlib.Path.unlink(pathlib.Path("debug.txt"), missing_ok=True)
+    pathlib.Path.unlink(pathlib.Path("debug.log"), missing_ok=True)
 
 def setup_logger():
     logger = logging.getLogger('genome_logger')
@@ -272,7 +284,7 @@ def play_game(net, pop, gen, ep) -> int:
         with open(f"{GAMESTATES_PATH}/gen_{gen}/{file_name}", 'w') as f:
             json.dump(game_result, f, cls=NpEncoder, indent=4)
     
-    logger.debug(f"Returning result {int(game_result["fitness"])}")
+    logger.debug(f"Returning result {int(game_result['fitness'])}")
     return int(game_result["fitness"])
 
 def eval_genomes(genomes, config):
@@ -399,11 +411,11 @@ def main():
         # This is likely because we ran out of memory.
         
         # # This would be ideal, but it would need testing to make sure it works, or it could cause serious issues since it will be left unattended, and I might not have time to test it before leaving, and I want to start a run before going.
-        # import errno
-        # if e.errno == errno.ENOSPC:
-        #     # We did run out of memory.
-        #     clean_gamestates(override=True)
-        clean_gamestates(override=True)
+        import errno
+        if e.errno == errno.ENOSPC:
+            # We did run out of memory.
+            clean_gamestates(override=True)
+        # clean_gamestates(override=True)
     except Exception:
         with open("debug.txt", "w") as f:
             f.write(traceback.format_exc())
@@ -613,8 +625,8 @@ def display_stats_from_gen(gen_num):
     # Going in reverse will save a lot of overwriting, and could lead to skipping checks
     # altogether, but I am too lazy to implement that.
     for file in reversed(pop_files):
-        with open(gen_path + file) as json_file:
-            game_data = json.load(json_file)
+        file_name = gen_path + file
+        game_data = GameStates.load_game_data(file_name)
         
         fitness, pop = get_file_details(file)
         sum_fitness += fitness
@@ -643,8 +655,8 @@ def display_stats_from_gen(gen_num):
     # print(best_pops)
     for pop_file in best_pops:
         # Print populations statistics
-        with open(gen_path + pop_file) as json_file:
-            game_data = json.load(json_file)
+        file_name = gen_path + pop_file
+        game_data = GameStates.load_game_data(file_name)
         fitness, pop = get_file_details(pop_file)
         stats = "\t"
         stats += f"{pop}: "

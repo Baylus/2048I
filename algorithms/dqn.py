@@ -81,6 +81,7 @@ class DQNTrainer():
         self.target_model = build_model(state_size, action_size)
         self.target_model.set_weights(self.model.get_weights())
         filename = "best.weights.h5"
+        # TODO: Consider saving more than just the weights
         self.callbacks.append(
             keras.callbacks.ModelCheckpoint(
                 filepath=dqns.CHECKPOINTS_PATH + filename, 
@@ -102,12 +103,12 @@ class DQNTrainer():
         # Make sure board is fresh
         self.board = Board()
 
-    def train(self, episodes: int = 1, max_time: int = dqns.MAX_TURNS):
-        for episode in range(episodes):
+    def train(self, episodes: int = dqns.EPISODES, max_time: int = dqns.MAX_TURNS):
+        for episode in range(1, episodes + 1):
             try:
                 # Reset the trainer
                 self.reset()
-                game_states = DQNStates(episode + 1)
+                game_states = DQNStates(episode)
                 # TODO: Enable viewing somehow when display is not disabled.
                 for i in range(max_time):  # Arbitrary max time steps per episode
                     game_states.store(self.board)
@@ -123,13 +124,13 @@ class DQNTrainer():
                         break
                     
                     if len(self.replay_buffer) > self.batch_size:
-                        print("Doing replay training now")
+                        # print("Doing replay training now")
                         minibatch = random.sample(self.replay_buffer, self.batch_size)
                         # state, action, reward, new state, done?
                         for s, a, r, ns, d in minibatch:
                             target = r
                             if not d:
-                                target = r + self.gamma * np.amax(self.target_model.predict(ns)[0])
+                                target = r + self.gamma * np.amax(self.target_model.predict(ns, verbose=0)[0])
                             target_f = self.model.predict(s, verbose=0)
                             # a - 1: Because our action value begins at 1, we need to map it back to arrays
                             target_f[0][a - 1] = target
@@ -198,5 +199,5 @@ class DQNTrainer():
         if np.random.rand() <= self.epsilon:
             return random.choice(list(Action))
         # print(f"Our current grid {self.board.grid}\n")
-        q_values = self.model.predict(self.board.grid)
+        q_values = self.model.predict(self.board.grid, verbose=0)
         return NETWORK_OUTPUT_MAP[np.argmax(q_values[0])]

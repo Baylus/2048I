@@ -62,6 +62,15 @@ class GameStates():
     def add_notes(self, notes):
         self.notes = notes
 
+    def load_game_data(file: str = "") -> dict:
+        if not file.startswith(GAMESTATES_PATH):
+            file = GAMESTATES_PATH + file
+
+        with open(file, 'r') as f:
+            data = json.load(file, f, cls=NpEncoder)
+        
+        return data
+
 
 class DQNStates(GameStates):
     def __init__(self, episode: int):
