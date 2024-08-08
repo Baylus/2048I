@@ -35,16 +35,22 @@ class MemoryBuffer(deque):
     # This prevents unnecessary disk writes on potentially very large files, since we are
     # going to have up to 2000 records in our replay buffer.
     unsaved_changes: bool
+    # We cannot store native object inside the pickle object.
+    # Having this here, because on linux we cannot store the object natively.
+    can_store_as_object: bool = False
 
     def __init__(self, len=2000, mem_file_name = "memory.pickle", reset = False):
+        print(f"What is this file name {mem_file_name}")
         self.memory_file = shelve.open(dqns.CHECKPOINTS_PATH + dqns.MEMORY_SUBDIR + mem_file_name)
         if "buffer" in self.memory_file and not reset:
             # We had a previous buffer stored in this memory file, and we arent trying to reset our memory.
             self = self.memory_file["buffer"]
+            print(f"We were able to find an existing replay buffer, it has {len(self)} records!")
         else:
             # We did not find a previous memory file. Create a new one.
+            print("We did not find a previous replay buffer")
             super().__init__(maxlen=len)
-            self.memory_file["buffer"] = self
+            # self.memory_file["buffer"] = self
         
         self.unsaved_changes = False
 
@@ -53,8 +59,17 @@ class MemoryBuffer(deque):
         self.unsaved_changes = True
 
     def save(self):
-        self.memory_file["buffer"] = self
         self.unsaved_changes = False
+        if self.can_store_as_object:
+            # Try to store it as an object, otherwise set state and move on
+            try:
+                self.memory_file["buffer"] = self
+                return
+            except TypeError:
+                # We are failing to pickle this object, just disable the option and move on
+                self.can_store_as_object = False
+        # Backup in case we werent able to store as object
+        self.memory_file["buffer"] = str(self)
     
     def close(self):
         if self.unsaved_changes:
