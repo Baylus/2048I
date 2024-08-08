@@ -71,8 +71,8 @@ class SharedMemory(MemoryBuffer, metaclass=Singleton):
 class ReplayMemory(MemoryBuffer):
     """Replay memory state to store the current replay buffer for local actor processing
     """
-    def __init__(self, mem_file_name = "replay_memory.pickle", *args):
-        super().__init__(mem_file_name=mem_file_name, *args)
+    def __init__(self, mem_file_name = "replay_memory.pickle", *args, **kwargs):
+        super().__init__(*args, mem_file_name=mem_file_name, **kwargs)
 
 
 
@@ -125,7 +125,7 @@ class DQNTrainer():
         self.epsilon_min = dqns.EPSILON_MIN
         self.epsilon_decay = dqns.EPSILON_DECAY
         self.batch_size = dqns.REPLAY_BATCH_SIZE
-        self.replay_buffer = ReplayMemory(2000, reset=reset)
+        self.replay_buffer = ReplayMemory(len=2000, reset=reset)
 
 
     def reset(self):
