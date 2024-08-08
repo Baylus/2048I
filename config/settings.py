@@ -76,12 +76,14 @@ class DQNSettings:
     EPSILON_START = 0.9  # Initial exploration rate
     EPSILON_MIN = 0.01    # Final exploration rate
     # Started at 0.995
-    EPSILON_DECAY = 0.99  # Decay rate per generation
+    EPSILON_DECAY = 0.995  # Decay rate per generation
 
-    REPLAY_BATCH_SIZE = 64
+    REPLAY_BUFFER_SIZE = 2000   # Total number of replays to keep in memory
+    REPLAY_BATCH_SIZE = 64      # Number of replays to sample when making decision
 
     # Within the CHECK
     CHECKPOINTS_PATH = CHECKPOINTS_PATH + "dqn/"
+    MEMORY_SUBDIR = "buffers/"
     CHECKPOINT_INTERVAL = 10
 
 BACKGROUND_COLOR = (187, 173, 160)

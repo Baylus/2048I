@@ -19,6 +19,7 @@ import random
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 # import keras with tensorflow's warning message disabled
 import keras
+import shelve
 
 from action import Action, NETWORK_OUTPUT_MAP
 from config.settings import BATCH_REMOVE_GENS, DQNSettings as dqns
@@ -27,12 +28,58 @@ from game import Board, GameDone, NoOpAction
 from utilities.singleton import Singleton
 from utilities.gamestates import DQNStates
 
-class MemoryBuffer(deque):
-    def __init__(self, len=2000):
-        super().__init__(maxlen=len)
+class MemoryBuffer():
+    buffer: deque
+
+    memory_file: shelve
+    # Determine if there have been any updates since the last time we made any updates
+    # to our deque in memory that we would need to save back to the file.
+    # This prevents unnecessary disk writes on potentially very large files, since we are
+    # going to have up to 2000 records in our replay buffer.
+    unsaved_changes: bool
+    # We cannot store native object inside the pickle object.
+    # Having this here, because on linux we cannot store the object natively.
+    can_store_as_object: bool = False
+
+    def __init__(self, len=2000, mem_file_name = "memory.pickle", reset = False):
+        print(f"What is this file name {mem_file_name}")
+        self.memory_file = shelve.open(dqns.CHECKPOINTS_PATH + dqns.MEMORY_SUBDIR + mem_file_name)
+        if "buffer" in self.memory_file and not reset:
+            # We had a previous buffer stored in this memory file, and we arent trying to reset our memory.
+            self.buffer = self.memory_file["buffer"]
+        else:
+            # We did not find a previous memory file. Create a new one.
+            print("We did not find a previous replay buffer")
+            self.buffer = deque(maxlen=len)
+        
+        self.unsaved_changes = False
+
+    def get_samples(self, samples):
+        """Gets a specified number of samples from this replay buffer
+
+        Args:
+            samples (int): Number of samples to get
+
+        Returns:
+            list[sample]: List of samples chosen
+        """
+        return random.sample(self.buffer, samples)
 
     def store(self, memory):
-        self.append(memory)
+        self.buffer.append(memory)
+        self.unsaved_changes = True
+
+    def __len__(self):
+        return len(self.buffer)
+    
+    def save(self):
+        self.memory_file["buffer"] = self.buffer
+        self.unsaved_changes = False
+    
+    def close(self):
+        if self.unsaved_changes:
+            self.save() # Make sure we save off before closing.
+        self.memory_file.close()
 
 class SharedMemory(MemoryBuffer, metaclass=Singleton):
     """ 
@@ -44,11 +91,13 @@ class SharedMemory(MemoryBuffer, metaclass=Singleton):
 class ReplayMemory(MemoryBuffer):
     """Replay memory state to store the current replay buffer for local actor processing
     """
-    pass
+    def __init__(self, mem_file_name = "replay_memory.pickle", *args, **kwargs):
+        super().__init__(*args, mem_file_name=mem_file_name, **kwargs)
+
 
 
 class DQNTrainer():
-    def __init__(self, checkpoint_file = "best.weights.h5"):
+    def __init__(self, checkpoint_file = "best.weights.h5", reset = False):
         self.model = None
         self.target_model = None
         self.board = Board()
@@ -70,7 +119,7 @@ class DQNTrainer():
         state_size = (4,)  # 4x4 grid flattened
         action_size = 4  # up, down, left, right
         self.model = build_model(state_size, action_size)
-        if checkpoint_file:
+        if checkpoint_file and not reset:
             if os.path.exists(check_path := dqns.CHECKPOINTS_PATH + checkpoint_file):
                 # Load the previous weights.
                 self.model.load_weights(check_path)
@@ -96,8 +145,8 @@ class DQNTrainer():
         self.epsilon_min = dqns.EPSILON_MIN
         self.epsilon_decay = dqns.EPSILON_DECAY
         self.batch_size = dqns.REPLAY_BATCH_SIZE
-        # TODO: Save replay memory when saving off weights
-        self.replay_buffer = ReplayMemory(2000)
+        self.replay_buffer = ReplayMemory(len=dqns.REPLAY_BUFFER_SIZE, reset=reset)
+        print(f"After making our replay buffer, it has {len(self.replay_buffer)} elements")
 
 
     def reset(self):
@@ -105,55 +154,65 @@ class DQNTrainer():
         self.board = Board()
 
     def train(self, episodes: int = dqns.EPISODES, max_time: int = dqns.MAX_TURNS):
-            print(f"Training episode {episode}")
-            try:
-                # Reset the trainer
-                self.reset()
-                game_states = DQNStates(episode)
-                # TODO: Enable viewing somehow when display is not disabled.
-                for i in range(max_time):  # Arbitrary max time steps per episode
-                    game_states.store(self.board)
-                    action = self._choose_action()
-                    # print(f"Our action results are type {type(action)}, and heres its value {action}")
-                    curr_state = self.board.grid
-                    next_state, reward, done = self._take_action(action)  # Execute action
-                    next_state = np.reshape(next_state, (4, 4)) # TODO: Confirm that this is correct/needed
-                    self.replay_buffer.store((curr_state, action, reward, next_state, done))
-                    
-                    if done:
-                        self.target_model.set_weights(self.model.get_weights())
-                        break
-                    
-                    if len(self.replay_buffer) > self.batch_size:
-                        # print("Doing replay training now")
-                        minibatch = random.sample(self.replay_buffer, self.batch_size)
-                        # state, action, reward, new state, done?
-                        for s, a, r, ns, d in minibatch:
-                            target = r
-                            if not d:
-                                target = r + self.gamma * np.amax(self.target_model.predict(ns, verbose=0)[0])
-                            target_f = self.model.predict(s, verbose=0)
-                            # a - 1: Because our action value begins at 1, we need to map it back to arrays
-                            target_f[0][a - 1] = target
-                            self.model.fit(s, target_f, epochs=1, verbose=0, callbacks=self.callbacks)
+        try:
+            for episode in range(1, episodes + 1):
+                print(f"Training episode {episode}")
+                try:
+                    # Reset the trainer
+                    self.reset()
+                    game_states = DQNStates(episode)
+                    # TODO: Enable viewing somehow when display is not disabled.
+                    for i in range(max_time):  # Arbitrary max time steps per episode
+                        game_states.store(self.board)
+                        action = self._choose_action()
+                        # print(f"Our action results are type {type(action)}, and heres its value {action}")
+                        curr_state = self.board.grid
+                        next_state, reward, done = self._take_action(action)  # Execute action
+                        next_state = np.reshape(next_state, (4, 4)) # TODO: Confirm that this is correct/needed
+                        self.replay_buffer.store((curr_state, action, reward, next_state, done))
                         
-                        if self.epsilon > self.epsilon_min:
-                            self.epsilon *= self.epsilon_decay
+                        if done:
+                            self.target_model.set_weights(self.model.get_weights())
+                            break
+                        
+                        if len(self.replay_buffer) > self.batch_size:
+                            # print("Doing replay training now")
+                            minibatch = self.replay_buffer.get_samples(self.batch_size)
+                            # state, action, reward, new state, done?
+                            for s, a, r, ns, d in minibatch:
+                                target = r
+                                if not d:
+                                    target = r + self.gamma * np.amax(self.target_model.predict(ns, verbose=0)[0])
+                                target_f = self.model.predict(s, verbose=0)
+                                # a - 1: Because our action value begins at 1, we need to map it back to arrays
+                                target_f[0][a - 1] = target
+                                self.model.fit(s, target_f, epochs=1, verbose=0, callbacks=self.callbacks)
+                            
+                            if self.epsilon > self.epsilon_min:
+                                self.epsilon *= self.epsilon_decay
 
-                if i == max_time:
-                    game_states.add_notes("We stalled our game out too long.")
-            finally:
-                game_states.log_game()
-                # House keeping
-                if episode % dqns.CHECKPOINT_INTERVAL == 0:
-                    self.save_weights(episode)
-                # See if we need to clean up our gamestates
-                # We should only need to prune the same interval that we batch delete, since they should
-                # All roughly be the same size.
-                # Actually, we are going to do it one less, because we want to be able to catch up in case the
-                # games are going longer due to fitter populations learning to survive.
-                if (episode % (BATCH_REMOVE_GENS - 1)) == 0:
-                    prune_gamestates()
+                    if i == max_time:
+                        game_states.add_notes("We stalled our game out too long.")
+                finally: # After training one episode
+                    game_states.log_game()
+                    # House keeping
+                    if episode % dqns.CHECKPOINT_INTERVAL == 0:
+                        self.save_weights(episode)
+                    # Save off our replay buffer
+                    self.replay_buffer.save()
+
+                    # See if we need to clean up our gamestates
+                    # We should only need to prune the same interval that we batch delete, since they should
+                    # All roughly be the same size.
+                    # Actually, we are going to do it one less, because we want to be able to catch up in case the
+                    # games are going longer due to fitter populations learning to survive.
+                    if (episode % (BATCH_REMOVE_GENS - 1)) == 0:
+                        prune_gamestates()
+        finally: # After trying whole training loop
+            # Make sure to close our replay buffer to ensure it works properly.
+            self.replay_buffer.close()
+            # Try to save off our weights, regardless of if its on the right interval.
+            self.save_weights(episode)
         # End .train()
 
     def save_weights(self, episode: int = 0):
