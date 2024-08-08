@@ -125,7 +125,6 @@ class DQNTrainer():
         self.epsilon_min = dqns.EPSILON_MIN
         self.epsilon_decay = dqns.EPSILON_DECAY
         self.batch_size = dqns.REPLAY_BATCH_SIZE
-        # TODO: Save replay memory when saving off weights
         self.replay_buffer = ReplayMemory(2000, reset=reset)
 
 
@@ -191,6 +190,8 @@ class DQNTrainer():
         finally: # After trying whole training loop
             # Make sure to close our replay buffer to ensure it works properly.
             self.replay_buffer.close()
+            # Try to save off our weights, regardless of if its on the right interval.
+            self.save_weights(episode)
         # End .train()
 
     def save_weights(self, episode: int = 0):
