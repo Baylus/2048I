@@ -41,9 +41,6 @@ class MemoryBuffer():
     # This prevents unnecessary disk writes on potentially very large files, since we are
     # going to have up to 2000 records in our replay buffer.
     unsaved_changes: bool
-    # We cannot store native object inside the pickle object.
-    # Having this here, because on linux we cannot store the object natively.
-    can_store_as_object: bool = False
 
     def __init__(self, len=2000, mem_file_name = "memory.pickle", reset = False):
         print(f"What is this file name {mem_file_name}")
