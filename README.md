@@ -18,3 +18,5 @@ The solution I will transition to after that is DQN (Deep Q-Learning), which I h
 # To improve
 - Maybe train multiple models at once, then average the model's weights occasionally. This avoids having to do extreme parallelizing, since I am struggling to implement that, but it would allow us to speed up the process.
 -- Look into Stochastic Weight Averaging (SWA), including possibly creating a learning schedule that involves starting the averaging/sharing learning at a certain point after enough training has occurred in each individual agent.
+-- Or value higher performing model's weights over lower performing ones.
+- Add screen to watch the current model training.
