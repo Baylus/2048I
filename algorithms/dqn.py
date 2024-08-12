@@ -13,6 +13,8 @@ the Learner and Actor should be singular instances
 
 """
 from collections import deque
+import concurrent.futures
+from contextlib import contextmanager
 import numpy as np
 import os
 import random
@@ -20,6 +22,8 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 # import keras with tensorflow's warning message disabled
 import keras
 import shelve
+import signal
+import threading
 
 from action import Action, NETWORK_OUTPUT_MAP
 from config.settings import BATCH_REMOVE_GENS, DQNSettings as dqns
@@ -176,17 +180,7 @@ class DQNTrainer():
                             break
                         
                         if len(self.replay_buffer) > self.batch_size:
-                            # print("Doing replay training now")
-                            minibatch = self.replay_buffer.get_samples(self.batch_size)
-                            # state, action, reward, new state, done?
-                            for s, a, r, ns, d in minibatch:
-                                target = r
-                                if not d:
-                                    target = r + self.gamma * np.amax(self.target_model.predict(ns, verbose=0)[0])
-                                target_f = self.model.predict(s, verbose=0)
-                                # a - 1: Because our action value begins at 1, we need to map it back to arrays
-                                target_f[0][a - 1] = target
-                                self.model.fit(s, target_f, epochs=1, verbose=0, callbacks=self.callbacks)
+                            self._replay_train()
                             
                             if self.epsilon > self.epsilon_min:
                                 self.epsilon *= self.epsilon_decay
@@ -214,6 +208,58 @@ class DQNTrainer():
             # Try to save off our weights, regardless of if its on the right interval.
             self.save_weights(episode)
         # End .train()
+
+    def _replay_train(self):
+        # print("Doing replay training now")
+        model_lock = threading.Lock() # Lock to prevent multi-access to self.model in parallel training
+        def train_one(replay) -> None:
+            # state, action, reward, new state, done?
+            s, a, r, ns, d = replay
+            target = r
+            if not d:
+                target = r + self.gamma * np.amax(self.target_model.predict(ns, verbose=0)[0])
+            with model_lock:
+                target_f = self.model.predict(s, verbose=0)
+                # a - 1: Because our action value begins at 1, we need to map it back to arrays
+                target_f[0][a - 1] = target
+                # This is where I would put the locking mechanism to prevent more than one process
+                # from writing back to the model.
+                self.model.fit(s, target_f, epochs=1, verbose=0, callbacks=self.callbacks)
+        
+        minibatch = self.replay_buffer.get_samples(self.batch_size)
+        ############ Protections for signal interrupts while replay training #############
+        # Create a global flag for termination
+        terminate_flag = False
+
+        def handle_termination(signum, frame):
+            global terminate_flag
+            terminate_flag = True
+            print("Termination signal received. Cleaning up...")
+
+        # Register signal handlers
+        signal.signal(signal.SIGINT, handle_termination)
+        signal.signal(signal.SIGTERM, handle_termination)
+
+        @contextmanager
+        def terminating_executor(max_workers):
+            with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+                try:
+                    yield executor
+                finally:
+                    if terminate_flag:
+                        executor.shutdown(wait=True)
+                        print("Executor shut down gracefully.")
+                        raise Exception("Exit signal received while replay training")
+        ############ END - Protections #############
+        
+        with terminating_executor(max_workers=dqns.MAX_WORKERS) as executor:
+            for replay in minibatch:
+                executor.submit(train_one, replay)
+
+            # We don't need to wait individually since they don't return anything.
+            # Just wait till they are all finished then shutdown
+            executor.shutdown(wait=True)
+                
 
     def save_weights(self, episode: int = 0):
         self.model.save_weights(dqns.CHECKPOINTS_PATH + f"{episode}.weights.h5")
