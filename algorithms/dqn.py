@@ -252,7 +252,7 @@ class DQNTrainer():
                         raise Exception("Exit signal received while replay training")
         ############ END - Protections #############
         
-        with terminating_executor(max_workers=dqns.MAX_WORKERS) as executor:
+        with terminating_executor(max_workers=dqns.REPLAY_TRAIN_WORKERS) as executor:
             for replay in minibatch:
                 executor.submit(train_one, replay)
 

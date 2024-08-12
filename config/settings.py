@@ -81,7 +81,7 @@ class DQNSettings:
     # There is a tighter limit on the value of more workers for this, since we have
     # required locks necessary to maintain functionality. So at some point, adding more
     # workers will not yield faster performance
-    MAX_WORKERS = 2
+    REPLAY_TRAIN_WORKERS = 2
     REPLAY_BUFFER_SIZE = 2000   # Total number of replays to keep in memory
     REPLAY_BATCH_SIZE = 64      # Number of replays to sample when making decision
 
