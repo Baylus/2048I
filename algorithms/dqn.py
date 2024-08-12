@@ -105,9 +105,11 @@ def handle_termination(signum, frame):
     terminate_flag = True
     print("Termination signal received. Cleaning up...")
 
-# Register signal handlers
-signal.signal(signal.SIGINT, handle_termination)
-signal.signal(signal.SIGTERM, handle_termination)
+# Only setup signal handlers if we are going to be training in parallel
+if dqns.ENABLE_PARALLEL_REPLAY_TRAINING:
+    # Register signal handlers
+    signal.signal(signal.SIGINT, handle_termination)
+    signal.signal(signal.SIGTERM, handle_termination)
 
 @contextmanager
 def terminating_executor(max_workers):
@@ -120,6 +122,13 @@ def terminating_executor(max_workers):
                 print("Executor shut down gracefully.")
                 sys.exit(0)
 
+@contextmanager
+def lock_if_needed(lock, is_needed = dqns.ENABLE_PARALLEL_REPLAY_TRAINING):
+    if is_needed:
+        with lock:
+            yield
+    else:
+        yield
 
 class DQNTrainer():
     def __init__(self, checkpoint_file = "best.weights.h5", reset = False):
@@ -238,8 +247,10 @@ class DQNTrainer():
             s, a, r, ns, d = replay
             target = r
             if not d:
-                target = r + self.gamma * np.amax(self.target_model.predict(ns, verbose=0)[0])
-            with model_lock:
+                target = r + self.gamma * np.amax(self.target_model.predict(ns,verbose=0)[0])
+            # Only lock if we need to because we are running parallel execution.
+            # This might not save much, but could reduce errors if we use it always
+            with lock_if_needed(model_lock):
                 target_f = self.model.predict(s, verbose=0)
                 # a - 1: Because our action value begins at 1, we need to map it back to arrays
                 target_f[0][a - 1] = target
@@ -248,16 +259,21 @@ class DQNTrainer():
                 self.model.fit(s, target_f, epochs=1, verbose=0, callbacks=self.callbacks)
         
         minibatch = self.replay_buffer.get_samples(self.batch_size)
-        with terminating_executor(max_workers=dqns.REPLAY_TRAIN_WORKERS) as executor:
-            try:
-                for replay in minibatch:
-                    executor.submit(train_one, replay)
-            except KeyboardInterrupt:
-                executor.shutdown(wait=False)
-                raise
-            # We don't need to wait individually since they don't return anything.
-            # Just wait till they are all finished then shutdown
-            executor.shutdown(wait=True)
+        if dqns.ENABLE_PARALLEL_REPLAY_TRAINING:
+            with terminating_executor(max_workers=dqns.REPLAY_TRAIN_WORKERS) as executor:
+                try:
+                    for replay in minibatch:
+                        executor.submit(train_one, replay)
+                except KeyboardInterrupt:
+                    executor.shutdown(wait=False)
+                    raise
+                # We don't need to wait individually since they don't return anything.
+                # Just wait till they are all finished then shutdown
+                executor.shutdown(wait=True)
+        else:
+            # We are just normally running our training
+            for replay in minibatch:
+                train_one(replay)
                 
 
     def save_weights(self, episode: int = 0):
