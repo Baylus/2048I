@@ -23,6 +23,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import keras
 import shelve
 import signal
+import sys
 import threading
 
 from action import Action, NETWORK_OUTPUT_MAP
@@ -95,6 +96,29 @@ class ReplayMemory(MemoryBuffer):
     def __init__(self, mem_file_name = "replay_memory.pickle", *args, **kwargs):
         super().__init__(*args, mem_file_name=mem_file_name, **kwargs)
 
+
+# Create a global flag for termination
+terminate_flag = False
+
+def handle_termination(signum, frame):
+    global terminate_flag
+    terminate_flag = True
+    print("Termination signal received. Cleaning up...")
+
+# Register signal handlers
+signal.signal(signal.SIGINT, handle_termination)
+signal.signal(signal.SIGTERM, handle_termination)
+
+@contextmanager
+def terminating_executor(max_workers):
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+        try:
+            yield executor
+        finally:
+            if terminate_flag:
+                executor.shutdown(wait=True)
+                print("Executor shut down gracefully.")
+                sys.exit(0)
 
 
 class DQNTrainer():
@@ -224,35 +248,13 @@ class DQNTrainer():
                 self.model.fit(s, target_f, epochs=1, verbose=0, callbacks=self.callbacks)
         
         minibatch = self.replay_buffer.get_samples(self.batch_size)
-        ############ Protections for signal interrupts while replay training #############
-        # Create a global flag for termination
-        terminate_flag = False
-
-        def handle_termination(signum, frame):
-            global terminate_flag
-            terminate_flag = True
-            print("Termination signal received. Cleaning up...")
-
-        # Register signal handlers
-        signal.signal(signal.SIGINT, handle_termination)
-        signal.signal(signal.SIGTERM, handle_termination)
-
-        @contextmanager
-        def terminating_executor(max_workers):
-            with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-                try:
-                    yield executor
-                finally:
-                    if terminate_flag:
-                        executor.shutdown(wait=True)
-                        print("Executor shut down gracefully.")
-                        raise Exception("Exit signal received while replay training")
-        ############ END - Protections #############
-        
         with terminating_executor(max_workers=dqns.REPLAY_TRAIN_WORKERS) as executor:
-            for replay in minibatch:
-                executor.submit(train_one, replay)
-
+            try:
+                for replay in minibatch:
+                    executor.submit(train_one, replay)
+            except KeyboardInterrupt:
+                executor.shutdown(wait=False)
+                raise
             # We don't need to wait individually since they don't return anything.
             # Just wait till they are all finished then shutdown
             executor.shutdown(wait=True)
