@@ -99,6 +99,7 @@ class ReplayMemory(MemoryBuffer):
 
 # Create a global flag for termination
 terminate_flag = False
+model_lock = threading.Lock() # Lock to prevent multi-access to self.model in parallel training
 
 def handle_termination(signum, frame):
     global terminate_flag
@@ -113,7 +114,7 @@ if dqns.ENABLE_PARALLEL_REPLAY_TRAINING:
 
 @contextmanager
 def terminating_executor(max_workers):
-    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         try:
             yield executor
         finally:
@@ -241,7 +242,6 @@ class DQNTrainer():
 
     def _replay_train(self):
         # print("Doing replay training now")
-        model_lock = threading.Lock() # Lock to prevent multi-access to self.model in parallel training
         def train_one(replay) -> None:
             # state, action, reward, new state, done?
             s, a, r, ns, d = replay
