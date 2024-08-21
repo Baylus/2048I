@@ -21,3 +21,4 @@ The solution I will transition to after that is DQN (Deep Q-Learning), which I h
 -- Look into Stochastic Weight Averaging (SWA), including possibly creating a learning schedule that involves starting the averaging/sharing learning at a certain point after enough training has occurred in each individual agent.
 -- Or value higher performing model's weights over lower performing ones.
 - Add screen to watch the current model training.
+- Maybe scale the max turn length with the current episode number?
