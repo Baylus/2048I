@@ -221,6 +221,10 @@ class DQNTrainer():
                             if self.epsilon > self.epsilon_min:
                                 self.epsilon *= self.epsilon_decay
 
+                        # Keep the window responsive
+                        if i % 10 == 0:
+                            pygame.event.pump()
+
                     if i == max_time:
                         game_states.add_notes("We stalled our game out too long.")
                 finally: # After training one episode
