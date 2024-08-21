@@ -409,8 +409,22 @@ def main():
             dqns_dirs = DQNSettings.CHECKPOINTS_PATH + DQNSettings.MEMORY_SUBDIR
             pathlib.Path(f"{dqns_dirs}").mkdir(parents=True, exist_ok=True)
             # TODO: Add checkpoint resuming
-            trainer = DQNTrainer(hide_screen=args.hide)
-            trainer.train(DQNSettings.EPISODES)
+            trainer = DQNTrainer(reset = args.reset, hide_screen = args.hide)
+            import datetime as dt
+            import time
+            try:
+                start = dt.datetime.now()
+                pstart = time.process_time()
+                trainer.train(DQNSettings.EPISODES)
+            finally:
+                end = dt.datetime.now()
+                pend = time.process_time()
+                duration = end - start
+                print(f"Here is the standard time delta: {str(duration)}")
+                print(f"Here is the processed time: {str(dt.timedelta(seconds=pend-pstart))}")
+                with open("duration.txt", "w") as f:
+                    f.write(str(duration))
+            
         else:
             pop, start_gen_num = get_pop_and_gen(args)
             get_gen.current = start_gen_num
