@@ -16,6 +16,9 @@ So, its not optimal, but I am going to be choosing NEAT for this solution, as th
 The solution I will transition to after that is DQN (Deep Q-Learning), which I have heard is very good at this sort of thing, and has a good primer on most of the key aspects of manual AI training, with back propagation and replay training.
 
 # To improve
-- reduce fitness points for every turn that the board does not change
-- Don't record gamestates where nothing changed, to save on gamestate space. Will have to update fitness penalty to track this new system.
-- Utilize Q Deep learning
+- Make it so the script automatically identifies and uses the right existing weights when resuming training, without manual input.
+- Maybe train multiple models at once, then average the model's weights occasionally. This avoids having to do extreme parallelizing, since I am struggling to implement that, but it would allow us to speed up the process.
+-- Look into Stochastic Weight Averaging (SWA), including possibly creating a learning schedule that involves starting the averaging/sharing learning at a certain point after enough training has occurred in each individual agent.
+-- Or value higher performing model's weights over lower performing ones.
+- Add screen to watch the current model training.
+- Maybe scale the max turn length with the current episode number?
