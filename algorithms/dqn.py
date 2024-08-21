@@ -198,6 +198,8 @@ class DQNTrainer():
                         if self.shared_screen:  # Show board update if enabled
                             # Update the screen to show the new board state
                             self.show_board(episode, i)
+                            pygame.event.pump()
+
                         next_state = np.reshape(next_state, (4, 4)) # TODO: Confirm that this is correct/needed
                         self.replay_buffer.store((curr_state, action, reward, next_state, done))
                         
@@ -220,10 +222,6 @@ class DQNTrainer():
                             
                             if self.epsilon > self.epsilon_min:
                                 self.epsilon *= self.epsilon_decay
-
-                        # Keep the window responsive
-                        if i % 10 == 0:
-                            pygame.event.pump()
 
                     if i == max_time:
                         game_states.add_notes("We stalled our game out too long.")
