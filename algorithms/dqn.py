@@ -15,6 +15,7 @@ the Learner and Actor should be singular instances
 from collections import deque
 import numpy as np
 import os
+import pygame
 import random
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 # import keras with tensorflow's warning message disabled
@@ -22,11 +23,12 @@ import keras
 import shelve
 
 from action import Action, NETWORK_OUTPUT_MAP
-from config.settings import BATCH_REMOVE_GENS, DQNSettings as dqns
+from config.settings import BACKGROUND_COLOR, BATCH_REMOVE_GENS, DQNSettings as dqns
 from files.manage_files import prune_gamestates
 from game import Board, GameDone, NoOpAction
 from utilities.singleton import Singleton
 from utilities.gamestates import DQNStates
+from utilities.screen import SharedScreen
 
 class MemoryBuffer():
     buffer: deque
@@ -97,10 +99,16 @@ class ReplayMemory(MemoryBuffer):
 
 
 class DQNTrainer():
-    def __init__(self, checkpoint_file = "best.weights.h5", reset = False):
+    shared_screen = None
+
+    def __init__(self, checkpoint_file = "best.weights.h5", reset = False, hide_screen = True):
         self.model = None
         self.target_model = None
         self.board = Board()
+
+        if not hide_screen:
+            self.shared_screen = SharedScreen()
+            self.shared_screen.init_screen()
         
         # Training models
         self.callbacks = [] # i.e. checkpointers
@@ -153,6 +161,25 @@ class DQNTrainer():
         # Make sure board is fresh
         self.board = Board()
 
+    def show_board(self, episode, turn):
+        # Fill background
+        if not self.shared_screen:
+            return
+        
+        screen = self.shared_screen.get_screen()
+        if not screen:
+            self.shared_screen.init_screen()
+            screen = self.shared_screen.get_screen()
+        
+        screen.fill(BACKGROUND_COLOR)
+
+        self.board.draw(screen)
+
+        self.shared_screen.draw_text("Episode: " + str(episode), 100, 650, font_size=40, color=(255, 0, 0))
+        self.shared_screen.draw_text("Turn: " + str(turn), 400, 650, font_size=40, color=(255, 0, 0))
+        
+        pygame.display.update()
+
     def train(self, episodes: int = dqns.EPISODES, max_time: int = dqns.MAX_TURNS):
         try:
             for episode in range(1, episodes + 1):
@@ -168,6 +195,9 @@ class DQNTrainer():
                         # print(f"Our action results are type {type(action)}, and heres its value {action}")
                         curr_state = self.board.grid
                         next_state, reward, done = self._take_action(action)  # Execute action
+                        if self.shared_screen:  # Show board update if enabled
+                            # Update the screen to show the new board state
+                            self.show_board(episode, i)
                         next_state = np.reshape(next_state, (4, 4)) # TODO: Confirm that this is correct/needed
                         self.replay_buffer.store((curr_state, action, reward, next_state, done))
                         

@@ -40,6 +40,7 @@ from algorithms.dqn import DQNTrainer
 from config.settings import *
 from files.manage_files import prune_gamestates, get_pop_and_gen
 from utilities.gamestates import GameStates
+from utilities.screen import SharedScreen
 
 parser = ArgumentParser()
 parser.add_argument("-r", "--reset", dest="reset", action="store_true", default=False,
@@ -88,7 +89,7 @@ args = parser.parse_args()
 args.parallel = PARALLEL_OVERRIDE or args.parallel
 args.dqn = DQNSettings.DQN_OVERRIDE or args.dqn
 # TODO: Once we have added screen visualization to DQN training, dont hide screen anymore
-args.hide = HIDE_OVERRIDE or args.hide or args.parallel or args.dqn
+args.hide = HIDE_OVERRIDE or args.hide or args.parallel
 
 # Check if args are valid
 if args.stats:
@@ -186,7 +187,9 @@ if BOARD_HEIGHT != BOARD_WIDTH:
     raise ValueError("ERROR: Your board ratio isnt 1:1, which is definitely disgusting")
 
 # Initialize Pygame
-pygame.init()
+# pygame.init()
+# We should be initializing pygame within screen here
+shared_screen = SharedScreen()
 
 if __name__ == "__main__":
     clean_gamestates()
@@ -196,8 +199,7 @@ logger = setup_logger()
 
 # Set up the display
 if not args.hide:
-    screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-    pygame.display.set_caption("2048I")
+    shared_screen.init_screen()
 
 # Globals modified and used all over
 
@@ -403,7 +405,7 @@ def main():
             dqns_dirs = DQNSettings.CHECKPOINTS_PATH + DQNSettings.MEMORY_SUBDIR
             pathlib.Path(f"{dqns_dirs}").mkdir(parents=True, exist_ok=True)
             # TODO: Add checkpoint resuming
-            trainer = DQNTrainer()
+            trainer = DQNTrainer(hide_screen=args.hide)
             trainer.train(DQNSettings.EPISODES)
         else:
             pop, start_gen_num = get_pop_and_gen(args)
@@ -577,21 +579,17 @@ def get_action(inputs) -> Action:
     return None
 
 
-def draw_text(surface, text, x, y, font_size=20, color=(255, 255, 255)):
-    font = pygame.font.SysFont(None, font_size)
-    text_surface = font.render(text, True, color)
-    surface.blit(text_surface, (x, y))
-
 def draw(board: Board, pop):
     # Fill background
+    screen = shared_screen.get_screen()
     if not screen:
         return
     screen.fill(BACKGROUND_COLOR)
 
     board.draw(screen)
 
-    draw_text(screen, "Generation: " + str(get_gen.current), 100, 650, font_size=40, color=(255, 0, 0))
-    draw_text(screen, "Population: " + str(pop), 400, 650, font_size=40, color=(255, 0, 0))
+    shared_screen.draw_text("Generation: " + str(get_gen.current), 100, 650, font_size=40, color=(255, 0, 0))
+    shared_screen.draw_text("Population: " + str(pop), 400, 650, font_size=40, color=(255, 0, 0))
     pygame.display.update()
 
 
