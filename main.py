@@ -122,18 +122,22 @@ if args.stats:
 def clean_gamestates(override = False):
     # Override enables forcing deletion of all things. Used in case things get really out of hand during automated training
     if override or (args.clean and not args.stats and args.reset and not SAVE_GAMESTATES):
-        print("Cleaning game states")
-        folder = GAMESTATES_PATH
-        for filename in os.listdir(folder):
-            file_path = os.path.join(folder, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)
-            except Exception as e:
-                print('Failed to delete %s. Reason: %s' % (file_path, e))
+        def _remove_directory(folder):
+            print("Cleaning game states")
+            for filename in os.listdir(folder):
+                file_path = os.path.join(folder, filename)
+                try:
+                    if os.path.isfile(file_path) or os.path.islink(file_path):
+                        os.unlink(file_path)
+                    elif os.path.isdir(file_path):
+                        shutil.rmtree(file_path)
+                except Exception as e:
+                    print('Failed to delete %s. Reason: %s' % (file_path, e))
 
+        _remove_directory(GAMESTATES_PATH)
+        # Make sure we are clearing our memory buffer if we are resetting.
+        _remove_directory(DQNSettings.CHECKPOINTS_PATH + DQNSettings.MEMORY_SUBDIR)
+    
     # Delete debug file to ensure we arent looking at old exceptions
     pathlib.Path.unlink(pathlib.Path("debug.txt"), missing_ok=True)
     pathlib.Path.unlink(pathlib.Path("debug.log"), missing_ok=True)
