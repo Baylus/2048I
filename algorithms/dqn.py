@@ -13,6 +13,7 @@ the Learner and Actor should be singular instances
 
 """
 from collections import deque
+import datetime as dt
 import numpy as np
 import os
 import pygame
@@ -183,6 +184,7 @@ class DQNTrainer():
     def train(self, episodes: int = dqns.EPISODES, max_time: int = dqns.MAX_TURNS):
         try:
             for episode in range(1, episodes + 1):
+                ep_start = dt.datetime.now()
                 print(f"Training episode {episode}")
                 try:
                     # Reset the trainer
@@ -226,6 +228,7 @@ class DQNTrainer():
                     if i == max_time:
                         game_states.add_notes("We stalled our game out too long.")
                 finally: # After training one episode
+                    print(f"Trained episode {episode}, which took {str(dt.datetime.now() - ep_start)}")
                     game_states.log_game()
                     # House keeping
                     if episode % dqns.CHECKPOINT_INTERVAL == 0:
