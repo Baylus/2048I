@@ -228,7 +228,8 @@ class DQNTrainer():
                     if i == max_time:
                         game_states.add_notes("We stalled our game out too long.")
                 finally: # After training one episode
-                    print(f"Trained episode {episode}, which took {str(dt.datetime.now() - ep_start)}")
+                    duration = dt.datetime.now() - ep_start
+                    print(f"Trained episode {episode}, which took {str(duration)} for {i} turns. Average of {str(duration / i)} per turn")
                     game_states.log_game()
                     # House keeping
                     if episode % dqns.CHECKPOINT_INTERVAL == 0:
