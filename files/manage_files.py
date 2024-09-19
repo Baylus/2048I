@@ -138,7 +138,11 @@ def get_dqn_checkpoint_file(dir: str, ignore_best: bool = False) -> str:
     
     # I think we should be already sorted because of the file sorting, but just in case sort it.
     valid_weight_nums.sort()
-    newest = valid_weight_nums[-1]
+    if valid_weight_nums:
+        newest = valid_weight_nums[-1]
+    else:
+        # There were no valid weight files
+        return ""
     return str(newest) + ".weights.h5"
 
 def get_newest_checkpoint_file(files: list[str], prefix: str) -> tuple[str, int]:
