@@ -23,7 +23,7 @@ import shelve
 
 from action import Action, NETWORK_OUTPUT_MAP
 from config.settings import BATCH_REMOVE_GENS, DQNSettings as dqns
-from files.manage_files import prune_gamestates
+from files.manage_files import prune_gamestates, get_dqn_checkpoint_file
 from game import Board, GameDone, NoOpAction
 from utilities.singleton import Singleton
 from utilities.gamestates import DQNStates
@@ -42,7 +42,6 @@ class MemoryBuffer():
     can_store_as_object: bool = False
 
     def __init__(self, len=2000, mem_file_name = "memory.pickle", reset = False):
-        print(f"What is this file name {mem_file_name}")
         self.memory_file = shelve.open(dqns.CHECKPOINTS_PATH + dqns.MEMORY_SUBDIR + mem_file_name)
         if "buffer" in self.memory_file and not reset:
             # We had a previous buffer stored in this memory file, and we arent trying to reset our memory.
@@ -97,7 +96,7 @@ class ReplayMemory(MemoryBuffer):
 
 
 class DQNTrainer():
-    def __init__(self, checkpoint_file = "best.weights.h5", reset = False):
+    def __init__(self, checkpoint_file = "", reset = False):
         self.model = None
         self.target_model = None
         self.board = Board()
@@ -119,13 +118,26 @@ class DQNTrainer():
         state_size = (4,)  # 4x4 grid flattened
         action_size = 4  # up, down, left, right
         self.model = build_model(state_size, action_size)
-        if checkpoint_file and not reset:
-            if os.path.exists(check_path := dqns.CHECKPOINTS_PATH + checkpoint_file):
-                # Load the previous weights.
-                self.model.load_weights(check_path)
+        self.resume_episode = 1 # Episode that we should start back on
+        if not reset:
+            checkpoint_path = ""
+            if checkpoint_file and os.path.exists(check_path := dqns.CHECKPOINTS_PATH + checkpoint_file):
+                # Try to find specified checkpoint file
+                checkpoint_path = check_path
             else:
-                print("We don't have our specified weights")
-                # TODO: Consider looking for other weight files within the directory.
+                # Try to the previous weights.
+                cfile, self.resume_episode = get_dqn_checkpoint_file(dqns.CHECKPOINTS_PATH)
+                checkpoint_path = dqns.CHECKPOINTS_PATH + cfile
+            
+            if checkpoint_path:
+                print(f"We found a checkpoint file to resume: {checkpoint_path}")
+                if not os.path.exists(checkpoint_path):
+                    print("What the... the checkpoint doesn't exist")
+                self.model.load_weights(checkpoint_path)
+                print("We loaded checkpoint properly")
+            else:
+                print("We don't have our specified weights. We are now resetting")
+                reset = True
 
         self.target_model = build_model(state_size, action_size)
         self.target_model.set_weights(self.model.get_weights())
@@ -136,7 +148,7 @@ class DQNTrainer():
                 filepath=dqns.CHECKPOINTS_PATH + filename, 
                 save_weights_only=True,
                 save_best_only=True
-            )        
+            )
         )
 
         # Hyperparameters
@@ -155,7 +167,7 @@ class DQNTrainer():
 
     def train(self, episodes: int = dqns.EPISODES, max_time: int = dqns.MAX_TURNS):
         try:
-            for episode in range(1, episodes + 1):
+            for episode in range(self.resume_episode, episodes + 1):
                 print(f"Training episode {episode}")
                 try:
                     # Reset the trainer
