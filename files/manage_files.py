@@ -111,7 +111,7 @@ def prune_gamestates():
 
 #### END MANAGE GAME STATES ####
 
-def get_dqn_checkpoint_file(dir: str = DQNSettings.CHECKPOINTS_PATH, ignore_best: bool = False, checkpoint_suffix = ".weights.h5") -> tuple[str, int]:
+def get_dqn_checkpoint_file(dir: str = DQNSettings.CHECKPOINTS_PATH, ignore_best: bool = False, checkpoint_suffix = DQNSettings.WEIGHTS_SUFFIX) -> tuple[str, int]:
     """Gets the best checkpoint filename to use for the dqn training
 
     Will choose the best or the most recent episode (so highest number), in that order.
@@ -129,8 +129,6 @@ def get_dqn_checkpoint_file(dir: str = DQNSettings.CHECKPOINTS_PATH, ignore_best
     if not ignore_best and BEST_FILE in files:
         return BEST_FILE, 0
     weight_files = [f for f in files if f[-len(checkpoint_suffix):] == checkpoint_suffix]
-    # At this point, we could have tried to find only model files, but got checkpoints too, since they also end in ".h5"
-    # But, the next step will filter out every file that doesn't have just numbers before the ".h5", so we are fine.
     valid_weight_nums = []
     for file in weight_files:
         try:

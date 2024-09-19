@@ -105,7 +105,7 @@ class DQNTrainer():
         
         # Training models
         self.callbacks = [] # i.e. checkpointers
-        filename = "best.weights.h5"
+        filename = "best" + dqns.WEIGHTS_SUFFIX
         # TODO: Consider saving more than just the weights
         self.callbacks.append(
             keras.callbacks.ModelCheckpoint(
@@ -181,17 +181,18 @@ class DQNTrainer():
         action_size = 4  # up, down, left, right
 
         self.model = None
+        self.resume_episode = 1
         if not reset:
             # Determine if we can resume from a checkpointed model or need to use weights
             # Determine if the file provided is valid
             if checkpoint_file and os.path.exists(check_path := dqns.CHECKPOINTS_PATH + checkpoint_file):
                 # We have been told to resume this checkpoint. figure out whether model or weights
                 print(f"We are resuming from this checkpoint file: {checkpoint_file}")
-                if ".weights.h5" in checkpoint_file:
+                if dqns.WEIGHTS_SUFFIX in checkpoint_file:
                     # Just toss it to the weights resumer. It should handle all the messy stuff.
                     print("its a weight checkpoint")
                     resume_weights()
-                elif checkpoint_file[-3:] == ".h5":
+                elif checkpoint_file[-3:] == dqns.MODEL_SUFFIX:
                     # We have checked already its not a weight file, so it has to be a model
                     print("its a model checkpoint")
                     self.model = keras.models.load_model(check_path)
@@ -200,8 +201,8 @@ class DQNTrainer():
             
             if not self.model:
                 # We now have to choose between loading a model or weights.
-                model_file, mep = get_dqn_checkpoint_file(checkpoint_suffix=".h5")
-                _, wep = get_dqn_checkpoint_file(checkpoint_suffix=".weights.h5")
+                model_file, mep = get_dqn_checkpoint_file(checkpoint_suffix=dqns.MODEL_SUFFIX)
+                _, wep = get_dqn_checkpoint_file(checkpoint_suffix=dqns.WEIGHTS_SUFFIX)
                 if mep and mep + dqns.STALER_MODEL_RESUME < wep:
                     # Our model file is too stale to resume from it, resume from weights
                     print(f"Our model checkpoint file is too old to resume {mep} < {wep}")
@@ -212,8 +213,13 @@ class DQNTrainer():
                     # We have a fresh enough model file for it to be worth resuming from.
                     print("We are resuming from our model checkpoint")
                     self.model = keras.models.load_model(dqns.CHECKPOINTS_PATH + model_file)
+                    self.resume_episode = mep
+                elif wep:
+                    # So, we have gotten here because our weights file is less than 10 and theres no model.
+                    resume_weights()
 
         if not self.model:
+            print("We couldn't find a checkpoint file to resume from.")
             # We have to start an entirely new model
             self.model = build_model(state_size, action_size)
             # Since we failed to find a checkpoint file, then we shouldn't resume our replay memory
@@ -293,9 +299,9 @@ class DQNTrainer():
         # End .train()
 
     def save_weights(self, episode: int = 0):
-        self.model.save_weights(dqns.CHECKPOINTS_PATH + f"{episode}.weights.h5")
+        self.model.save_weights(dqns.CHECKPOINTS_PATH + f"{episode}{dqns.WEIGHTS_SUFFIX}")
     def save_model(self, episode: int = 0):
-        self.model.save(dqns.CHECKPOINTS_PATH + f"{episode}.h5")
+        self.model.save(dqns.CHECKPOINTS_PATH + f"{episode}{dqns.MODEL_SUFFIX}")
     
     def _take_action(self, action: Action) -> tuple[list[int], int, bool]:
         """Executes action on current board, and retrieves the values relevant for that action.
