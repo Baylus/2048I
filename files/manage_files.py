@@ -30,8 +30,6 @@ def GetFolderSize(path):
                 print("error with file:  " + join(item[0], file))
     return TotalSize
 
-# print(float(GetFolderSize("C:\\")) /1024 /1024 /1024)
-
 
 def delete_folder(folder):
     for filename in os.listdir(folder):
