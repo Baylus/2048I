@@ -111,7 +111,7 @@ def prune_gamestates():
 
 #### END MANAGE GAME STATES ####
 
-def get_dqn_checkpoint_file(dir: str, ignore_best: bool = False) -> str:
+def get_dqn_checkpoint_file(dir: str, ignore_best: bool = False) -> tuple[str, int]:
     """Gets the best checkpoint filename to use for the dqn training
 
     Will choose the "best.weights.h5 or the most recent episode (so highest number), in that order.
@@ -121,12 +121,12 @@ def get_dqn_checkpoint_file(dir: str, ignore_best: bool = False) -> str:
         ignore_best (bool): If we want to ignore the best file for any reason.
 
     Returns:
-        str: Name of checkpoint file, or empty string if there is none
+        str, int: Name of checkpoint file, or empty string if there is none and number of the episode
     """
     BEST_WEIGHTS = "best.weights.h5"
     files = os.listdir(dir)
     if not ignore_best and BEST_WEIGHTS in files:
-        return BEST_WEIGHTS
+        return BEST_WEIGHTS, 0
     weight_files = [f for f in files if f[-11:] == ".weights.h5"]
     valid_weight_nums = []
     for file in weight_files:
@@ -142,8 +142,8 @@ def get_dqn_checkpoint_file(dir: str, ignore_best: bool = False) -> str:
         newest = valid_weight_nums[-1]
     else:
         # There were no valid weight files
-        return ""
-    return str(newest) + ".weights.h5"
+        return "", 0
+    return str(newest) + ".weights.h5", newest
 
 def get_newest_checkpoint_file(files: list[str], prefix: str) -> tuple[str, int]:
     """Gets the most recent checkpoint from the previous run the resume the training.
