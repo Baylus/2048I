@@ -111,6 +111,41 @@ def prune_gamestates():
 
 #### END MANAGE GAME STATES ####
 
+def get_temporary_checkpoint_files(file_extensions: list[str], dir = DQNSettings.CHECKPOINTS_PATH) -> list[str]:
+    files = os.listdir(dir)
+    filtered = []
+    for file in files:
+        for ext in file_extensions:
+            if file[-len(ext):] == ext:
+                filtered.append(file)
+    print("All filtered files" + str(filtered))
+    valid_temp_files = []
+    for file in filtered:
+        for ext in file_extensions:
+            if file[-len(ext):] == ext:
+                try:
+                    int(file[:-len(ext)])
+                    valid_temp_files.append(file)
+                except ValueError:
+                    # This means its one of our protected or archived weight files that we don't want to use
+                    pass
+    return valid_temp_files
+
+
+def clean_temporary_checkpoints():
+    """Cleans out the temporary checkpoints for when we need to reset.
+    """
+    print("Cleaning out our temporary dqn files")
+    files = get_temporary_checkpoint_files([DQNSettings.MODEL_SUFFIX, DQNSettings.WEIGHTS_SUFFIX])
+    for file in files:
+        # print(f"File to delete {file}")
+        f = os.path.join(DQNSettings.CHECKPOINTS_PATH, file)
+        try:
+            os.unlink(f)
+        except Exception as e:
+            print('Failed to delete %s. Reason: %s' % (f, e))
+
+
 def get_dqn_checkpoint_file(dir: str = DQNSettings.CHECKPOINTS_PATH, ignore_best: bool = False, checkpoint_suffix = DQNSettings.WEIGHTS_SUFFIX) -> tuple[str, int]:
     """Gets the best checkpoint filename to use for the dqn training
 

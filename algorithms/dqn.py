@@ -23,7 +23,7 @@ import shelve
 
 from action import Action, NETWORK_OUTPUT_MAP
 from config.settings import BATCH_REMOVE_GENS, DQNSettings as dqns
-from files.manage_files import prune_gamestates, get_dqn_checkpoint_file
+from files.manage_files import prune_gamestates, get_dqn_checkpoint_file, clean_temporary_checkpoints
 from game import Board, GameDone, NoOpAction
 from utilities.singleton import Singleton
 from utilities.gamestates import DQNStates
@@ -97,12 +97,16 @@ class ReplayMemory(MemoryBuffer):
 
 class DQNTrainer():
     def __init__(self, checkpoint_file = "", reset = False):
+        if reset:
+            clean_temporary_checkpoints()
         self.model = None
         self.target_model = None
         self.board = Board()
 
         reset = self.init_models(checkpoint_file, reset)
-        
+        # It is possible that we are now supposed to reset our checkpoints.
+        if reset:
+            clean_temporary_checkpoints()
         # Training models
         self.callbacks = [] # i.e. checkpointers
         filename = "best" + dqns.WEIGHTS_SUFFIX
