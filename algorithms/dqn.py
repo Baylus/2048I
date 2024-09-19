@@ -100,47 +100,11 @@ class DQNTrainer():
         self.model = None
         self.target_model = None
         self.board = Board()
+
+        reset = self.init_models(checkpoint_file, reset)
         
         # Training models
         self.callbacks = [] # i.e. checkpointers
-        # Define the neural network model
-        def build_model(input_shape, action_size):
-            model = keras.Sequential([
-                keras.layers.Input(shape=input_shape),
-                keras.layers.Dense(256, activation='relu'),
-                keras.layers.Dense(256, activation='relu'),
-                keras.layers.Dense(action_size, activation='linear')
-            ])
-            model.compile(optimizer=keras.optimizers.Adam(learning_rate=dqns.LAERNING_RATE), loss='mse')
-            return model
-
-        # Initialize parameters
-        state_size = (4,)  # 4x4 grid flattened
-        action_size = 4  # up, down, left, right
-        self.model = build_model(state_size, action_size)
-        self.resume_episode = 1 # Episode that we should start back on
-        if not reset:
-            checkpoint_path = ""
-            if checkpoint_file and os.path.exists(check_path := dqns.CHECKPOINTS_PATH + checkpoint_file):
-                # Try to find specified checkpoint file
-                checkpoint_path = check_path
-            else:
-                # Try to the previous weights.
-                cfile, self.resume_episode = get_dqn_checkpoint_file(dqns.CHECKPOINTS_PATH)
-                checkpoint_path = dqns.CHECKPOINTS_PATH + cfile
-            
-            if checkpoint_path:
-                print(f"We found a checkpoint file to resume: {checkpoint_path}")
-                if not os.path.exists(checkpoint_path):
-                    print("What the... the checkpoint doesn't exist")
-                self.model.load_weights(checkpoint_path)
-                print("We loaded checkpoint properly")
-            else:
-                print("We don't have our specified weights. We are now resetting")
-                reset = True
-
-        self.target_model = build_model(state_size, action_size)
-        self.target_model.set_weights(self.model.get_weights())
         filename = "best.weights.h5"
         # TODO: Consider saving more than just the weights
         self.callbacks.append(
@@ -160,6 +124,105 @@ class DQNTrainer():
         self.replay_buffer = ReplayMemory(len=dqns.REPLAY_BUFFER_SIZE, reset=reset)
         print(f"After making our replay buffer, it has {len(self.replay_buffer)} elements")
 
+    def init_models(self, checkpoint_file = "", reset = False) -> bool:
+        """Does a bunch of fancy stuff to resume from a previous checkpoint. Model or weights.
+
+        I didn't need to make this whole thing, but its easier to change whether I am saving models
+        or weights if I do it like this. Also, I can do custom stuff like resuming a model file
+        if it is only X episodes old, or settle for the weights file that is newer.
+
+        Args:
+            checkpoint_file (str, optional): _description_. Defaults to "".
+            reset (bool, optional): _description_. Defaults to False.
+
+        Returns:
+            bool: Whether we need to reset or not.
+        """
+        # Define the neural network model
+        def build_model(input_shape, action_size):
+            model = keras.Sequential([
+                keras.layers.Input(shape=input_shape),
+                keras.layers.Dense(256, activation='relu'),
+                keras.layers.Dense(256, activation='relu'),
+                keras.layers.Dense(action_size, activation='linear')
+            ])
+            model.compile(optimizer=keras.optimizers.Adam(learning_rate=dqns.LAERNING_RATE), loss='mse')
+            return model
+
+        def resume_weights():
+            if not self.model:
+                self.model = build_model(state_size, action_size)
+            else:
+                # We shouldnt be trying to build a new model if we are resuming. Something is wrong
+                raise Exception("We are making another model after having done so. Something must be wrong.")
+            self.resume_episode = 1 # Episode that we should start back on
+            checkpoint_path = ""
+            if checkpoint_file and os.path.exists(check_path := dqns.CHECKPOINTS_PATH + checkpoint_file):
+                # Try to find specified checkpoint file
+                checkpoint_path = check_path
+            else:
+                # Try to the load previous weights.
+                cfile, self.resume_episode = get_dqn_checkpoint_file(dqns.CHECKPOINTS_PATH)
+                checkpoint_path = dqns.CHECKPOINTS_PATH + cfile
+            
+            if checkpoint_path:
+                print(f"We found a checkpoint file to resume: {checkpoint_path}")
+                if not os.path.exists(checkpoint_path):
+                    print("What the... the checkpoint doesn't exist")
+                self.model.load_weights(checkpoint_path)
+                print("We loaded checkpoint properly")
+            else:
+                print("We don't have our specified weights. We are now resetting")
+                global reset
+                reset = True
+            
+        # Initialize parameters
+        state_size = (4,)  # 4x4 grid flattened
+        action_size = 4  # up, down, left, right
+
+        self.model = None
+        if not reset:
+            # Determine if we can resume from a checkpointed model or need to use weights
+            # Determine if the file provided is valid
+            if checkpoint_file and os.path.exists(check_path := dqns.CHECKPOINTS_PATH + checkpoint_file):
+                # We have been told to resume this checkpoint. figure out whether model or weights
+                print(f"We are resuming from this checkpoint file: {checkpoint_file}")
+                if ".weights.h5" in checkpoint_file:
+                    # Just toss it to the weights resumer. It should handle all the messy stuff.
+                    print("its a weight checkpoint")
+                    resume_weights()
+                elif checkpoint_file[-3:] == ".h5":
+                    # We have checked already its not a weight file, so it has to be a model
+                    print("its a model checkpoint")
+                    self.model = keras.models.load_model(check_path)
+                else:
+                    print(f"We were given a faulty checkpoint file name that doesn't exist: {checkpoint_file}\nAttempting to resume normally")
+            
+            if not self.model:
+                # We now have to choose between loading a model or weights.
+                model_file, mep = get_dqn_checkpoint_file(checkpoint_suffix=".h5")
+                _, wep = get_dqn_checkpoint_file(checkpoint_suffix=".weights.h5")
+                if mep and mep + dqns.STALER_MODEL_RESUME < wep:
+                    # Our model file is too stale to resume from it, resume from weights
+                    print(f"Our model checkpoint file is too old to resume {mep} < {wep}")
+                    # Again, I am just tossing it to the entire resume weights function. It's slower
+                    # and does a bit of redundant calculations, but I know it workds and I am not gonna touch it
+                    resume_weights()
+                elif model_file:
+                    # We have a fresh enough model file for it to be worth resuming from.
+                    print("We are resuming from our model checkpoint")
+                    self.model = keras.models.load_model(dqns.CHECKPOINTS_PATH + model_file)
+
+        if not self.model:
+            # We have to start an entirely new model
+            self.model = build_model(state_size, action_size)
+            # Since we failed to find a checkpoint file, then we shouldn't resume our replay memory
+            reset = True
+        
+        self.target_model = build_model(state_size, action_size)
+        self.target_model.set_weights(self.model.get_weights())
+        
+        return reset
 
     def reset(self):
         # Make sure board is fresh
@@ -210,6 +273,7 @@ class DQNTrainer():
                     # House keeping
                     if episode % dqns.CHECKPOINT_INTERVAL == 0:
                         self.save_weights(episode)
+                        self.save_model(episode)
                     # Save off our replay buffer
                     self.replay_buffer.save()
 
@@ -225,11 +289,14 @@ class DQNTrainer():
             self.replay_buffer.close()
             # Try to save off our weights, regardless of if its on the right interval.
             self.save_weights(episode)
+            self.save_model(episode)
         # End .train()
 
     def save_weights(self, episode: int = 0):
         self.model.save_weights(dqns.CHECKPOINTS_PATH + f"{episode}.weights.h5")
-
+    def save_model(self, episode: int = 0):
+        self.model.save(dqns.CHECKPOINTS_PATH + f"{episode}.h5")
+    
     def _take_action(self, action: Action) -> tuple[list[int], int, bool]:
         """Executes action on current board, and retrieves the values relevant for that action.
 

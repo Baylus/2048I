@@ -402,8 +402,7 @@ def main():
         if args.dqn:
             dqns_dirs = DQNSettings.CHECKPOINTS_PATH + DQNSettings.MEMORY_SUBDIR
             pathlib.Path(f"{dqns_dirs}").mkdir(parents=True, exist_ok=True)
-            # TODO: Add checkpoint resuming
-            trainer = DQNTrainer()
+            trainer = DQNTrainer(reset = args.reset)
             trainer.train(DQNSettings.EPISODES)
         else:
             pop, start_gen_num = get_pop_and_gen(args)

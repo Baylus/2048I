@@ -111,27 +111,30 @@ def prune_gamestates():
 
 #### END MANAGE GAME STATES ####
 
-def get_dqn_checkpoint_file(dir: str, ignore_best: bool = False) -> tuple[str, int]:
+def get_dqn_checkpoint_file(dir: str = DQNSettings.CHECKPOINTS_PATH, ignore_best: bool = False, checkpoint_suffix = ".weights.h5") -> tuple[str, int]:
     """Gets the best checkpoint filename to use for the dqn training
 
-    Will choose the "best.weights.h5 or the most recent episode (so highest number), in that order.
+    Will choose the best or the most recent episode (so highest number), in that order.
 
     Args:
         dir (str): Directory of the DQN checkpoints
         ignore_best (bool): If we want to ignore the best file for any reason.
+        checkpoint_suffix (str): We can use this to also search for any models that we may want to look for.
 
     Returns:
         str, int: Name of checkpoint file, or empty string if there is none and number of the episode
     """
-    BEST_WEIGHTS = "best.weights.h5"
+    BEST_FILE = "best" + checkpoint_suffix
     files = os.listdir(dir)
-    if not ignore_best and BEST_WEIGHTS in files:
-        return BEST_WEIGHTS, 0
-    weight_files = [f for f in files if f[-11:] == ".weights.h5"]
+    if not ignore_best and BEST_FILE in files:
+        return BEST_FILE, 0
+    weight_files = [f for f in files if f[-len(checkpoint_suffix):] == checkpoint_suffix]
+    # At this point, we could have tried to find only model files, but got checkpoints too, since they also end in ".h5"
+    # But, the next step will filter out every file that doesn't have just numbers before the ".h5", so we are fine.
     valid_weight_nums = []
     for file in weight_files:
         try:
-            valid_weight_nums.append(int(file[:-11]))
+            valid_weight_nums.append(int(file[:-len(checkpoint_suffix)]))
         except ValueError:
             # This means its one of our protected or archived weight files that we don't want to use
             pass
@@ -143,7 +146,8 @@ def get_dqn_checkpoint_file(dir: str, ignore_best: bool = False) -> tuple[str, i
     else:
         # There were no valid weight files
         return "", 0
-    return str(newest) + ".weights.h5", newest
+    return str(newest) + checkpoint_suffix, newest
+
 
 def get_newest_checkpoint_file(files: list[str], prefix: str) -> tuple[str, int]:
     """Gets the most recent checkpoint from the previous run the resume the training.
