@@ -84,7 +84,11 @@ class DQNSettings:
     # Within the CHECK
     CHECKPOINTS_PATH = CHECKPOINTS_PATH + "dqn/"
     MEMORY_SUBDIR = "buffers/"
+    WEIGHTS_SUFFIX = ".weights.h5"
+    MODEL_SUFFIX = ".keras"
     CHECKPOINT_INTERVAL = 10
+    # How much staler a model file can be before we choose the weights instead.
+    STALER_MODEL_RESUME = 10
 
 BACKGROUND_COLOR = (187, 173, 160)
 BOARD_COLOR = (187, 173, 160)

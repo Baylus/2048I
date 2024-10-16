@@ -30,8 +30,6 @@ def GetFolderSize(path):
                 print("error with file:  " + join(item[0], file))
     return TotalSize
 
-# print(float(GetFolderSize("C:\\")) /1024 /1024 /1024)
-
 
 def delete_folder(folder):
     for filename in os.listdir(folder):
@@ -112,6 +110,77 @@ def prune_gamestates():
         clean_gamestates()
 
 #### END MANAGE GAME STATES ####
+
+def get_temporary_checkpoint_files(file_extensions: list[str], dir = DQNSettings.CHECKPOINTS_PATH) -> list[str]:
+    files = os.listdir(dir)
+    filtered = []
+    for file in files:
+        for ext in file_extensions:
+            if file[-len(ext):] == ext:
+                filtered.append(file)
+    print("All filtered files" + str(filtered))
+    valid_temp_files = []
+    for file in filtered:
+        for ext in file_extensions:
+            if file[-len(ext):] == ext:
+                try:
+                    int(file[:-len(ext)])
+                    valid_temp_files.append(file)
+                except ValueError:
+                    # This means its one of our protected or archived weight files that we don't want to use
+                    pass
+    return valid_temp_files
+
+
+def clean_temporary_checkpoints():
+    """Cleans out the temporary checkpoints for when we need to reset.
+    """
+    print("Cleaning out our temporary dqn files")
+    files = get_temporary_checkpoint_files([DQNSettings.MODEL_SUFFIX, DQNSettings.WEIGHTS_SUFFIX])
+    for file in files:
+        # print(f"File to delete {file}")
+        f = os.path.join(DQNSettings.CHECKPOINTS_PATH, file)
+        try:
+            os.unlink(f)
+        except Exception as e:
+            print('Failed to delete %s. Reason: %s' % (f, e))
+
+
+def get_dqn_checkpoint_file(dir: str = DQNSettings.CHECKPOINTS_PATH, ignore_best: bool = False, checkpoint_suffix = DQNSettings.WEIGHTS_SUFFIX) -> tuple[str, int]:
+    """Gets the best checkpoint filename to use for the dqn training
+
+    Will choose the best or the most recent episode (so highest number), in that order.
+
+    Args:
+        dir (str): Directory of the DQN checkpoints
+        ignore_best (bool): If we want to ignore the best file for any reason.
+        checkpoint_suffix (str): We can use this to also search for any models that we may want to look for.
+
+    Returns:
+        str, int: Name of checkpoint file, or empty string if there is none and number of the episode
+    """
+    BEST_FILE = "best" + checkpoint_suffix
+    files = os.listdir(dir)
+    if not ignore_best and BEST_FILE in files:
+        return BEST_FILE, 0
+    weight_files = [f for f in files if f[-len(checkpoint_suffix):] == checkpoint_suffix]
+    valid_weight_nums = []
+    for file in weight_files:
+        try:
+            valid_weight_nums.append(int(file[:-len(checkpoint_suffix)]))
+        except ValueError:
+            # This means its one of our protected or archived weight files that we don't want to use
+            pass
+    
+    # I think we should be already sorted because of the file sorting, but just in case sort it.
+    valid_weight_nums.sort()
+    if valid_weight_nums:
+        newest = valid_weight_nums[-1]
+    else:
+        # There were no valid weight files
+        return "", 0
+    return str(newest) + checkpoint_suffix, newest
+
 
 def get_newest_checkpoint_file(files: list[str], prefix: str) -> tuple[str, int]:
     """Gets the most recent checkpoint from the previous run the resume the training.
