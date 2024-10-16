@@ -293,7 +293,7 @@ class DQNTrainer():
                     # Actually, we are going to do it one less, because we want to be able to catch up in case the
                     # games are going longer due to fitter populations learning to survive.
                     if (episode % (BATCH_REMOVE_GENS - 1)) == 0:
-                        prune_gamestates()
+                        prune_gamestates(dqn=True)
         finally: # After trying whole training loop
             # Make sure to close our replay buffer to ensure it works properly.
             self.replay_buffer.close()

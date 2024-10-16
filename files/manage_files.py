@@ -93,7 +93,7 @@ def clean_gamestates(dqn = False):
                 # We are training dqn
                 nums[int(name[name.find("_") + 1:-5])] = name
         return nums
-    gen_map: dict[int, str] = get_gen_nums(existing_gens)
+    gen_map: dict[int, str] = get_gen_nums(existing_gens, dqn)
     gen_nums = list(gen_map.keys())
     gen_nums.sort()
     p(f"We have {len(gen_nums)} available gen nums before")
@@ -142,6 +142,7 @@ def clean_gamestates(dqn = False):
     for num in gen_nums:
         # Remove the oldest generations first
         path = f"{GAMESTATES_PATH}/{gen_map[num]}"
+        p(f"Removing protected generation {num}")
         try:
             delete_object(path)
             removed += 1
@@ -157,7 +158,9 @@ def prune_gamestates(dqn = False):
     Maybe try to be cheeky and return a guess for how many generations to wait before checking again.
     """
     size = GetFolderSize(GAMESTATES_PATH)
-    if (size > MAX_SIZE_OF_GAMESTATES * (1024 * 1024 * 1024)):
+    max_size_gb = MAX_SIZE_OF_GAMESTATES * (1024 * 1024 * 1024)
+    p(f"Checking if our current game states exceed maximum allowed amount. {size} > {max_size_gb}")
+    if (size > max_size_gb):
         clean_gamestates(dqn)
 
 #### END MANAGE GAME STATES ####
