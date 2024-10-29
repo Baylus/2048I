@@ -19,80 +19,13 @@ import random
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 # import keras with tensorflow's warning message disabled
 import keras
-import shelve
 
 from action import Action, NETWORK_OUTPUT_MAP
 from config.settings import BATCH_REMOVE_GENS, DQNSettings as dqns
+from algorithms.dqn_classes import *
 from files.manage_files import prune_gamestates, get_dqn_checkpoint_file, clean_temporary_checkpoints
 from game import Board, GameDone, NoOpAction
-from utilities.singleton import Singleton
 from utilities.gamestates import DQNStates
-
-class MemoryBuffer():
-    buffer: deque
-
-    memory_file: shelve
-    # Determine if there have been any updates since the last time we made any updates
-    # to our deque in memory that we would need to save back to the file.
-    # This prevents unnecessary disk writes on potentially very large files, since we are
-    # going to have up to 2000 records in our replay buffer.
-    unsaved_changes: bool
-    # We cannot store native object inside the pickle object.
-    # Having this here, because on linux we cannot store the object natively.
-    can_store_as_object: bool = False
-
-    def __init__(self, len=2000, mem_file_name = "memory.pickle", reset = False):
-        self.memory_file = shelve.open(dqns.CHECKPOINTS_PATH + dqns.MEMORY_SUBDIR + mem_file_name)
-        if "buffer" in self.memory_file and not reset:
-            # We had a previous buffer stored in this memory file, and we arent trying to reset our memory.
-            self.buffer = self.memory_file["buffer"]
-        else:
-            # We did not find a previous memory file. Create a new one.
-            print("We did not find a previous replay buffer")
-            self.buffer = deque(maxlen=len)
-        
-        self.unsaved_changes = False
-
-    def get_samples(self, samples):
-        """Gets a specified number of samples from this replay buffer
-
-        Args:
-            samples (int): Number of samples to get
-
-        Returns:
-            list[sample]: List of samples chosen
-        """
-        return random.sample(self.buffer, samples)
-
-    def store(self, memory):
-        self.buffer.append(memory)
-        self.unsaved_changes = True
-
-    def __len__(self):
-        return len(self.buffer)
-    
-    def save(self):
-        self.memory_file["buffer"] = self.buffer
-        self.unsaved_changes = False
-    
-    def close(self):
-        if self.unsaved_changes:
-            self.save() # Make sure we save off before closing.
-        self.memory_file.close()
-
-class SharedMemory(MemoryBuffer, metaclass=Singleton):
-    """ 
-        Shared replay memory for when we need to have parallel processes where 
-        we will access both local and shared memory buffers.
-    """
-    pass
-
-class ReplayMemory(MemoryBuffer):
-    """Replay memory state to store the current replay buffer for local actor processing
-    """
-    def __init__(self, mem_file_name = "replay_memory.pickle", *args, **kwargs):
-        super().__init__(*args, mem_file_name=mem_file_name, **kwargs)
-
 
 
 class DQNTrainer():
@@ -125,7 +58,10 @@ class DQNTrainer():
         self.epsilon_min = dqns.EPSILON_MIN
         self.epsilon_decay = dqns.EPSILON_DECAY
         self.batch_size = dqns.REPLAY_BATCH_SIZE
-        self.replay_buffer = ReplayMemory(len=dqns.REPLAY_BUFFER_SIZE, reset=reset)
+        if dqns.SHELF_REPLAY:
+            self.replay_buffer = PrioritizedReplayMemory(len=dqns.REPLAY_BUFFER_SIZE, reset=reset)
+        else:
+            self.replay_buffer = PrioritizedReplayMemory(len=dqns.REPLAY_BUFFER_SIZE)
         print(f"After making our replay buffer, it has {len(self.replay_buffer)} elements")
 
     def init_models(self, checkpoint_file = "", reset = False) -> bool:
@@ -257,28 +193,27 @@ class DQNTrainer():
                         # print(f"Our action results are type {type(action)}, and heres its value {action}")
                         curr_state = self.board.grid
                         next_state, reward, done = self._take_action(action)  # Execute action
-                        next_state = np.reshape(next_state, (4, 4)) # TODO: Confirm that this is correct/needed
-                        self.replay_buffer.store((curr_state, action, reward, next_state, done))
+                        next_state = np.reshape(next_state, (4, 4)) # Reshape if needed
+
+                        # Calculate initial priority for the new experience
+                        target = reward if done else reward + self.gamma * np.amax(self.target_model.predict(next_state, verbose=0)[0])
+                        q_value = self.model.predict(curr_state, verbose=0)[0][action - 1]  # Assuming action index adjustment is needed
+                        td_error = abs(target - q_value)  # Temporal difference error
+                        priority = (td_error + 0.01) ** 0.6  # Adding epsilon and scaling with alpha=0.6
                         
+                        # Store the experience with the priority
+                        self.replay_buffer.store((curr_state, action, reward, next_state, done), priority)
+
                         if done:
-                            self.target_model.set_weights(self.model.get_weights())
+                            self.target_model.set_weights(self.model.get_weights()) # Sync target network
                             break
                         
                         if len(self.replay_buffer) > self.batch_size:
                             # print("Doing replay training now")
-                            minibatch = self.replay_buffer.get_samples(self.batch_size)
-                            # state, action, reward, new state, done?
-                            for s, a, r, ns, d in minibatch:
-                                target = r
-                                if not d:
-                                    target = r + self.gamma * np.amax(self.target_model.predict(ns, verbose=0)[0])
-                                target_f = self.model.predict(s, verbose=0)
-                                # a - 1: Because our action value begins at 1, we need to map it back to arrays
-                                target_f[0][a - 1] = target
-                                self.model.fit(s, target_f, epochs=1, verbose=0, callbacks=self.callbacks)
-                            
-                            if self.epsilon > self.epsilon_min:
-                                self.epsilon *= self.epsilon_decay
+                            self._replay_and_update_priorities()
+                        
+                        if self.epsilon > self.epsilon_min:
+                            self.epsilon *= self.epsilon_decay
 
                     if i >= max_time:
                         game_states.add_notes("We stalled our game out too long.")
@@ -305,6 +240,33 @@ class DQNTrainer():
             self.save_weights(episode)
             self.save_model(episode)
         # End .train()
+
+    def _replay_and_update_priorities(self):
+        # Sample from the replay buffer with importance sampling weights
+        minibatch, idxs, priorities = self.replay_buffer.sample(self.batch_size, beta=0.4)
+        updated_priorities = []
+
+        for (state, action, reward, next_state, done), is_weight in minibatch:
+            # Compute the target Q-value
+            target = reward
+            if not done:
+                target = reward + self.gamma * np.amax(self.target_model.predict(next_state, verbose=0)[0])
+
+            # Get the current Q-values and calculate TD error
+            q_values = self.model.predict(state, verbose=0)
+            td_error = abs(target - q_values[0][action - 1])  # Calculate temporal difference error
+
+            # Apply importance sampling weight to the loss for this experience
+            q_values[0][action - 1] = target  # Update Q-value for the taken action
+            self.model.fit(state, q_values, sample_weight=np.array([is_weight]), epochs=1, verbose=0)
+
+            # Update priority with the new TD error
+            new_priority = (td_error + 0.01) ** 0.6  # Update priority with alpha=0.6
+            updated_priorities.append(new_priority)
+
+        # Update all priorities in the SumTree
+        self.replay_buffer.update_priorities(idxs, updated_priorities)
+
 
     def save_weights(self, episode: int = 0):
         self.model.save_weights(dqns.CHECKPOINTS_PATH + f"{episode}{dqns.WEIGHTS_SUFFIX}")
