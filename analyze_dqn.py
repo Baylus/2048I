@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from config.settings import DQNSettings
+
 # Directory containing the JSON files
 directory = 'game_states'
 
@@ -32,7 +34,8 @@ for filename in os.listdir(directory):
             score_values.append(data['score'])
             populations.append(population)
             # Check if the game timed out
-            timeouts.append(len(data['game_states']) == 1000)
+            timed_out = len(data['game_states']) >= DQNSettings.MAX_TURNS if DQNSettings.MAX_TURNS else False
+            timeouts.append(timed_out)
 
 # Convert lists to pandas DataFrame for easier manipulation
 df = pd.DataFrame({

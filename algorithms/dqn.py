@@ -247,7 +247,11 @@ class DQNTrainer():
                     self.reset()
                     game_states = DQNStates(episode)
                     # TODO: Enable viewing somehow when display is not disabled.
-                    for i in range(max_time):  # Arbitrary max time steps per episode
+                    i = 0
+                    while True:
+                        if max_time and i >= max_time:
+                            break
+                        i += 1
                         game_states.store(self.board)
                         action = self._choose_action()
                         # print(f"Our action results are type {type(action)}, and heres its value {action}")
@@ -276,7 +280,7 @@ class DQNTrainer():
                             if self.epsilon > self.epsilon_min:
                                 self.epsilon *= self.epsilon_decay
 
-                    if i == max_time:
+                    if i >= max_time:
                         game_states.add_notes("We stalled our game out too long.")
                 finally: # After training one episode
                     game_states.log_game()
@@ -293,7 +297,7 @@ class DQNTrainer():
                     # Actually, we are going to do it one less, because we want to be able to catch up in case the
                     # games are going longer due to fitter populations learning to survive.
                     if (episode % (BATCH_REMOVE_GENS - 1)) == 0:
-                        prune_gamestates()
+                        prune_gamestates(dqn=True)
         finally: # After trying whole training loop
             # Make sure to close our replay buffer to ensure it works properly.
             self.replay_buffer.close()

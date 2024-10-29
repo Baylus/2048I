@@ -43,8 +43,18 @@ def delete_folder(folder):
             print('Failed to delete %s. Reason: %s' % (file_path, e))
     pathlib.Path.rmdir(folder)
 
+def delete_object(obj_path: str):
+    """Delete either a folder or file.
 
-def clean_gamestates():
+    Args:
+        path (str): path to object
+    """
+    if os.path.isfile(obj_path) or os.path.islink(obj_path):
+        os.unlink(obj_path)
+    elif os.path.isdir(obj_path):
+        delete_folder(obj_path)
+
+def clean_gamestates(dqn = False):
     """Cleans out gamestates.
 
     Will delete the oldest $BATCH_REMOVE_GENS from gamestates, perserving every
@@ -63,12 +73,35 @@ def clean_gamestates():
     # We know for a fact that we have to remove some generations.
     # Get all generations
     existing_gens = os.listdir(GAMESTATES_PATH)
-    gen_nums = [int(name[4:]) for name in existing_gens]
-    p(f"We have {len(gen_nums)} available gen nums before")
+    def get_gen_nums(gen_files: list[str], dqn = False) -> dict[int, str]:
+        """Get generation numbers of gamestates to purge.
+
+        Args:
+            gen_files (list[str]): Names of all the generation files
+            dqn (bool, optional): Whether we are training dqn or not. Defaults to False.
+
+        Returns:
+            dict[int, str]: dictionary of the generation numbers present mapping 
+                            to their respective file names.
+        """
+        nums: dict[int] = {}
+        for name in gen_files:
+            if not dqn:
+                # We are training neat
+                nums[int(name[4:])] = name
+            else:
+                # We are training dqn
+                nums[int(name[name.find("_") + 1:-5])] = name
+        return nums
+    gen_map: dict[int, str] = get_gen_nums(existing_gens, dqn)
+    gen_nums = list(gen_map.keys())
     gen_nums.sort()
+    p(f"We have {len(gen_nums)} available gen nums before")
 
     removed = 0
     # Delete $BATCH_REMOVE_GENS, while perserving archived generations
+    # gen_nums[:] to create a copy so we can modify list. This list can be used later if we do not find enough
+    # non-protected generations to delete and have to resort to destroying them
     for num in gen_nums[:]:
         # Check if we should keep this one archived
         if ARCHIVE_GEN_INTERVAL and (num % ARCHIVE_GEN_INTERVAL) == 0:
@@ -76,11 +109,23 @@ def clean_gamestates():
             continue
         # delete this generation
         p(f"Deleting generation {num}")
-        delete_folder(f"{GAMESTATES_PATH}/gen_{num}")
+        file_path = f"{GAMESTATES_PATH}/{gen_map[num]}"
+        try:
+            delete_object(file_path)
+        except:
+            msg = "ERROR: We failed to delete a DQN gamestate file, despite it being marked for removal. Something is wrong"
+            p(msg)
+            raise
+
         # Housekeeping
         # Remove from original list incase we need to 
         # start removing protected generations
-        gen_nums.remove(num)
+        try:
+            del gen_map[num]
+            gen_nums.remove(num) # Remove from list too incase we need to use list later for destroying protected gens
+        except KeyError:
+            print("ERROR: Somehow we deleted the file, but it wasn't present in the dictionary anymore. Something is really wrong.")
+            raise
         removed += 1
         if removed >= BATCH_REMOVE_GENS:
             # We removed enough.
@@ -94,20 +139,29 @@ def clean_gamestates():
         p("We couldn't remove enough generations, we are getting rid of protected generations now")
     
     # We did not remove enough. Start removing the protected generations
-    for i in range(BATCH_REMOVE_GENS - removed):
+    for num in gen_nums:
         # Remove the oldest generations first
-        delete_folder(f"{GAMESTATES_PATH}/gen_{gen_nums[i]}")
+        path = f"{GAMESTATES_PATH}/{gen_map[num]}"
+        p(f"Removing protected generation {num}")
+        try:
+            delete_object(path)
+            removed += 1
+            if removed >= BATCH_REMOVE_GENS:
+                # We removed enough.
+                return
+        except:
+            p(f"Failed to delete object {path}, i dont care much anymore, just move on to the next one.")
 
-    pass
-
-def prune_gamestates():
+def prune_gamestates(dqn = False):
     """Will check if the gamestates folder is too full, then clean it up if it is
 
     Maybe try to be cheeky and return a guess for how many generations to wait before checking again.
     """
     size = GetFolderSize(GAMESTATES_PATH)
-    if (size > MAX_SIZE_OF_GAMESTATES * (1024 * 1024 * 1024)):
-        clean_gamestates()
+    max_size_gb = MAX_SIZE_OF_GAMESTATES * (1024 * 1024 * 1024)
+    p(f"Checking if our current game states exceed maximum allowed amount. {size} > {max_size_gb}")
+    if (size > max_size_gb):
+        clean_gamestates(dqn)
 
 #### END MANAGE GAME STATES ####
 
